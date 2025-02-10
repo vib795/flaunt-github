@@ -2,8 +2,8 @@
   "name": "flaunt-github",
   "displayName": "flaunt-github",
   "description": "",
-  "version": "0.0.1",
-  "publisher": "Utkarsh Singh",
+  "version": "1.0.0",
+  "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "repository": {
     "type": "git",

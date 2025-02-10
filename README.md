@@ -26,31 +26,6 @@
 - **Visual Studio Code:**  
   Version 1.70.0 or later is required.
 
-## Installation
-
-### Packaging via VSCE
-
-1. **Package the Extension:**
-   - Ensure your extension builds successfully by running:
-     ```bash
-     npm run build
-     ```
-   - Package your extension by running:
-     ```bash
-     vsce package
-     ```
-   This command creates a `.vsix` file in your project directory.
-
-2. **Install the Extension in VS Code:**
-   - Open VS Code.
-   - Open the Command Palette by pressing `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS).
-   - Run **"Extensions: Install from VSIX..."**.
-   - Select your generated `.vsix` file.
-   - Reload VS Code if prompted.
-
-### (Future) Marketplace Installation
-
-Once published, your extension will be available on the [Visual Studio Code Marketplace](https://marketplace.visualstudio.com/), where users can install it directly.
 
 ## Configuration
 
@@ -94,10 +69,10 @@ Below is the logo for Flaunt GitHub. It’s designed to be both classy and disti
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! If you have ideas for improvements or encounter any issues, please open an issue or submit a pull request.
+Contributions are welcome! If you have ideas for improvements or encounter any [issues](https://github.com/vib795/flaunt-github/issues), please open an issue or submit a [pull request](https://github.com/vib795/flaunt-github/pulls).
 
 **Flaunt your progress. Flaunt GitHub!**
