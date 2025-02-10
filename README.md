@@ -64,7 +64,7 @@ Below is the logo for Flaunt GitHub. It’s designed to be both classy and disti
 
 ## Changelog
 
-### 0.0.1
+### 1.0.0
 - Initial release featuring automatic activity tracking, periodic commits, and manual commit support.
 
 ## License
