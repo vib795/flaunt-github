@@ -1,0 +1,71 @@
+{
+  "name": "flaunt-github",
+  "displayName": "flaunt-github",
+  "description": "",
+  "version": "0.0.1",
+  "publisher": "Utkarsh Singh",
+  "icon": "images/logo.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/flaunt-github.git"
+  },
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:codeTracking.start"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "flaunt-github.helloWorld",
+        "title": "Hello World"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Code Tracking Configuration",
+      "properties": {
+        "codeTracking.githubToken": {
+          "type": "string",
+          "description": "Your GitHub Personal Access Token with repo permissions",
+          "default": ""
+        },
+        "codeTracking.githubUsername": {
+          "type": "string",
+          "description": "Your GitHub username",
+          "default": ""
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --platform=node --target=node14 --outfile=dist/extension.js --external:vscode",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --target=node14 --outfile=dist/extension.js --external:vscode --watch"
+  },
+  "devDependencies": {
+    "vscode": "^1.1.37",
+    "@types/vscode": "1.70.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.22.0",
+    "@typescript-eslint/parser": "^8.22.0",
+    "eslint": "^9.19.0",
+    "typescript": "^4.9.0",
+    "ts-loader": "^9.5.2",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.18.0"
+  },
+  "dependencies": {
+    "@octokit/rest": "^19.0.7",
+    "simple-git": "^3.19.1"
+  }
+}

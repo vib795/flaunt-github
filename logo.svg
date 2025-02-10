@@ -1,0 +1,45 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Definitions for gradients and a subtle glow effect -->
+  <defs>
+    <!-- Background gradient: a refined dark blue-gray tone -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2C3E50"/>
+      <stop offset="100%" stop-color="#34495E"/>
+    </linearGradient>
+    <!-- Circle gradient: a muted gold gradient for a classy accent -->
+    <linearGradient id="circleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8A6E2E"/>
+      <stop offset="100%" stop-color="#A68C4B"/>
+    </linearGradient>
+    <!-- A subtle glow filter to add refinement -->
+    <filter id="subtleGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background with rounded corners -->
+  <rect width="128" height="128" fill="url(#bgGradient)" rx="16" ry="16"/>
+
+  <!-- Delicate decorative curves for flair -->
+  <path d="M20,40 Q40,25 60,40" stroke="#BDC3C7" stroke-width="2" fill="none" stroke-linecap="round" filter="url(#subtleGlow)"/>
+  <path d="M68,40 Q88,25 108,40" stroke="#BDC3C7" stroke-width="2" fill="none" stroke-linecap="round" filter="url(#subtleGlow)"/>
+  <path d="M20,88 Q40,103 60,88" stroke="#BDC3C7" stroke-width="2" fill="none" stroke-linecap="round" filter="url(#subtleGlow)"/>
+  <path d="M68,88 Q88,103 108,88" stroke="#BDC3C7" stroke-width="2" fill="none" stroke-linecap="round" filter="url(#subtleGlow)"/>
+
+  <!-- Main circular element with the muted gold gradient -->
+  <circle cx="64" cy="64" r="30" fill="url(#circleGradient)" filter="url(#subtleGlow)"/>
+
+  <!-- Elegant "FG" overlay using a serif font -->
+  <text x="64" y="75" text-anchor="middle" fill="#ECF0F1" font-size="28" font-family="Georgia, serif" font-weight="bold" filter="url(#subtleGlow)">
+    FG
+  </text>
+
+  <!-- Caption for the extension name -->
+  <text x="64" y="120" fill="#ECF0F1" font-size="12" font-family="Verdana, sans-serif" text-anchor="middle">
+    Flaunt GitHub
+  </text>
+</svg>
