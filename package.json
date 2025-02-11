@@ -2,12 +2,12 @@
   "name": "flaunt-github",
   "displayName": "flaunt-github",
   "description": "",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/flaunt-github.git"
+    "url": "https://github.com/vib795/flaunt-github.git"
   },
   "engines": {
     "vscode": "^1.70.0"
