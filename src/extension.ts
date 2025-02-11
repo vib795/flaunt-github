@@ -83,14 +83,14 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // Set up a timer to commit coding summaries every 30 minutes.
-  const commitInterval = 30 * 60 * 1000; // 30 minutes in milliseconds
+  const commitInterval = 30 * 60 * 1000;
   setInterval(async () => {
     await commitCodingSummary(localRepoPath, githubUsername);
     // Reset the in-memory summary after committing.
     codingSummary = '';
   }, commitInterval);
 
-  // Register a command so the user can manually trigger a commit.
+  // Register a command so you can manually trigger a commit.
   let disposable = vscode.commands.registerCommand('codeTracking.start', async () => {
     await commitCodingSummary(localRepoPath, githubUsername);
     vscode.window.showInformationMessage('Manual commit of coding summary executed.');
@@ -100,7 +100,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 }
 
-// This function appends the coding summary to a file, commits, and pushes the changes.
+// Append the coding summary to a file, commit and pushes the changes.
 async function commitCodingSummary(localRepoPath: string, githubUsername: string) {
   if (!codingSummary) {
     // Nothing to commit.
@@ -112,11 +112,11 @@ async function commitCodingSummary(localRepoPath: string, githubUsername: string
     // Append the new summary to the summary file.
     fs.appendFileSync(summaryFilePath, codingSummary, { encoding: 'utf8' });
 
-    // Use simple-git to add, commit, and push changes.
     await git.cwd(localRepoPath); // Ensure we are in the repository directory.
     await git.add(SUMMARY_FILENAME);
     const commitMessage = `Coding activity summary - ${new Date().toLocaleString()}`;
     await git.commit(commitMessage);
+    
     // Push to the 'main' branch (adjust if your default branch is different).
     await git.push('origin', 'main');
     vscode.window.showInformationMessage(`Committed coding summary at ${new Date().toLocaleTimeString()}`);
