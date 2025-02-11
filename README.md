@@ -54,17 +54,9 @@ Replace `YOUR_GITHUB_PERSONAL_ACCESS_TOKEN` and `YOUR_GITHUB_USERNAME` with your
 - **Manual Commit:**  
   You can manually trigger a commit by opening the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`) and running the command **"Hello World"** (or the command you have set up for this purpose).
 
-## Logo
-
-Below is the logo for Flaunt GitHub. It’s designed to be both classy and distinctive:
-
-![Flaunt GitHub Logo](images/logo.png)
-
-*Tip:* Ensure you have placed your logo image (`logo.png`) in an `images` folder at the root of your extension.
-
 ## Changelog
 
-### 1.0.1
+### 1.0.3
 - Initial release featuring automatic activity tracking, periodic commits, and manual commit support.
 
 ## License
