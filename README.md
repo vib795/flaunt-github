@@ -1,35 +1,34 @@
 # Flaunt GitHub
 
-**Flaunt GitHub** is a Visual Studio Code extension that helps you keep track of your coding activity by automatically logging file save events and committing a summary of your work to a dedicated GitHub repository every 30 minutes. Flaunt your progress effortlessly and let your code tell your story!
+**Flaunt GitHub** is a Visual Studio Code extension that logs your coding sessions by automatically committing a summary of your work every 30 minutes to a dedicated GitHub repository. Forget the misleading activity graphs—get an honest record of your coding productivity and flaunt your progress!
 
 ## Features
 
 - **Automatic Activity Tracking:**  
-  The extension monitors file save events in VS Code and logs each event with a timestamp.
+  Logs every file save event in VS Code with a timestamp.
 
 - **Periodic GitHub Commits:**  
-  Every 30 minutes, the accumulated coding summary is appended to a log file in your GitHub repository, automatically committed, and pushed to GitHub.
+  Every 30 minutes, your coding summary is appended to a log file (`coding_summary.txt`), committed, and pushed to your GitHub repository.
 
 - **Manual Commit Trigger:**  
-  Use the Command Palette to trigger an on-demand commit if you want to capture your progress immediately.
+  Instantly capture your progress by triggering a commit via the Command Palette.
 
-- **Repository Management:**  
-  On activation, the extension checks if a repository named `code-tracking` exists in your GitHub account. If not, it creates the repository automatically (as a private repo if configured).
+- **Smart Repository Management:**  
+  On activation, the extension checks for a repository named `code-tracking` in your GitHub account and automatically creates it if needed.
 
 ## Requirements
 
 - **GitHub Account:**  
-  You must have a GitHub account along with a Personal Access Token (PAT) that has the necessary scopes:
-  - For **public repositories:** `public_repo`
-  - For **private repositories:** `repo`
+  You need a GitHub account along with a Personal Access Token (PAT) with:
+  - `public_repo` for public repositories, or
+  - `repo` for private repositories.
 
 - **Visual Studio Code:**  
-  Version 1.70.0 or later is required.
-
+  Version 1.70.0 or later.
 
 ## Configuration
 
-After installing the extension, you need to configure your GitHub credentials. Open your VS Code settings (via **File > Preferences > Settings** or by editing your `settings.json`) and add the following:
+After installing the extension, add your GitHub credentials to your VS Code settings (via **File > Preferences > Settings** or editing your `settings.json`):
 
 ```json
 {
@@ -38,25 +37,25 @@ After installing the extension, you need to configure your GitHub credentials. O
 }
 ```
 
-Replace `YOUR_GITHUB_PERSONAL_ACCESS_TOKEN` and `YOUR_GITHUB_USERNAME` with your actual GitHub credentials.
+Replace the placeholders with your actual GitHub credentials.
 
 ## Usage
 
-- **Automatic Repository Setup:**  
-  When the extension activates, it checks for a GitHub repository named `code-tracking` under your account. If it doesn’t exist, it creates the repository automatically.
+- **Automatic Setup:**  
+  On activation, the extension verifies if a `code-tracking` repository exists under your GitHub account. If it doesn't, the repository is created automatically.
 
 - **Activity Logging:**  
-  Every time you save a file in VS Code, the extension logs the event along with a timestamp.
+  Every file save event is recorded with a timestamp.
 
-- **Periodic Commits:**  
-  Every 30 minutes, the extension appends the current log to a file (typically `coding_summary.txt`), commits with a timestamped message, and pushes the changes to your GitHub repository.
+- **Automatic Commits:**  
+  Every 30 minutes, the accumulated summary is committed to GitHub with a timestamped message.
 
-- **Manual Commit:**  
-  You can manually trigger a commit by opening the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`) and running the command **"Hello World"** (or the command you have set up for this purpose).
+- **Manual Commits:**  
+  Open the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`) and run the configured command to trigger an immediate commit.
 
 ## Changelog
 
-### 1.0.3
+### 1.0.4
 - Initial release featuring automatic activity tracking, periodic commits, and manual commit support.
 
 ## License
@@ -65,6 +64,6 @@ This project is licensed under the [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! If you have ideas for improvements or encounter any [issues](https://github.com/vib795/flaunt-github/issues), please open an issue or submit a [pull request](https://github.com/vib795/flaunt-github/pulls).
+Contributions are welcome! If you have suggestions or encounter any issues, please open an [issue](https://github.com/vib795/flaunt-github/issues) or submit a [pull request](https://github.com/vib795/flaunt-github/pulls).
 
 **Flaunt your progress. Flaunt GitHub!**
