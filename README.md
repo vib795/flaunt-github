@@ -1,6 +1,6 @@
 # Flaunt GitHub
 
-**Flaunt GitHub** is a Visual Studio Code extension that logs your coding activity by automatically capturing file save events and periodically committing a summary to a dedicated GitHub repository. It creates (or uses) a private repository named `code-tracking` and logs every save event with a timestamp—formatted in your local timezone (auto-detected by default, with an optional override). Flaunt your progress and let your code tell your story!
+**Flaunt GitHub** is a [Visual Studio Code extension](https://marketplace.visualstudio.com/items?itemName=UtkarshSingh.flaunt-github) that logs your coding activity by automatically capturing file save events and periodically committing a summary to a dedicated GitHub repository. It creates (or uses) a private repository named `code-tracking` and logs every save event with a timestamp—formatted in your local timezone (auto-detected by default, with an optional override). Flaunt your progress and let your code tell your story!
 
 
 ## Features
