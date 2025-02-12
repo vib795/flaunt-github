@@ -106,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // Set up a timer to commit coding summaries.
-  // (For testing, interval is set to 30 minutes. Adjust as needed.)
+  // (For testing, interval is set to 30 minutes.)
   const commitInterval = 30 * 60 * 1000;
   setInterval(async () => {
     outputChannel.appendLine('Attempting to commit coding summary...');
