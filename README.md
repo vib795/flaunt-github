@@ -1,6 +1,6 @@
 # Flaunt GitHub
 
-**Flaunt GitHub** is a [Visual Studio Code extension](https://marketplace.visualstudio.com/items?itemName=UtkarshSingh.flaunt-github) that logs your coding activity by automatically capturing file save events and periodically committing a summary to a dedicated GitHub repository. It creates (or uses) a private repository named `code-tracking` and logs every save event with a timestamp—formatted in your local timezone (auto-detected by default, with an optional override). Flaunt your progress and let your code tell your story!
+[**Flaunt GitHub**](https://github.com/vib795/flaunt-github/) is a [Visual Studio Code extension](https://marketplace.visualstudio.com/items?itemName=UtkarshSingh.flaunt-github) that logs your coding activity by automatically capturing file save events and periodically committing a summary to a dedicated GitHub repository. It creates (or uses) a private repository named `code-tracking` and logs every save event with a timestamp—formatted in your local timezone (auto-detected by default, with an optional override). Flaunt your progress and let your code tell your story!
 
 
 ## Features
@@ -72,7 +72,7 @@ Replace the placeholders with your actual GitHub token, username, and desired ti
 
 ## Changelog
 
-### 1.2.2
+### 1.2.3
 - **New Features:**
   - Auto-detection of system timezone with an optional override via settings.
   - Enhanced logging with detailed timestamps (including timezone information) in both commit messages and output channel logs.
@@ -89,7 +89,7 @@ This project is licensed under the [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! If you have suggestions for improvements or encounter any issues, please contact the author at flauntgithub@gmail.com or submit a pull request @ [Flaunt Github](https://github.com/vib795/flaunt-github/).
+Contributions are welcome! If you have suggestions for improvements or encounter any issues, please contact the author at flauntgithub@gmail.com or submit a pull request or raise an issue @ [Flaunt Github](https://github.com/vib795/flaunt-github/).
 
 
 # **Flaunt your progress. Flaunt GitHub!**
