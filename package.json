@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "flaunt-github",
   "description": "",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "repository": {
@@ -40,6 +40,11 @@
           "type": "string",
           "description": "Your GitHub username",
           "default": ""
+        },
+        "codeTracking.commitInterval": {
+          "type": "number",
+          "description": "Time in minutes between each automatic commit",
+          "default": 30
         }
       }
     }

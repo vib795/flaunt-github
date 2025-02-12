@@ -23,7 +23,12 @@ export async function activate(context: vscode.ExtensionContext) {
   const githubUsername = vscode.workspace.getConfiguration().get<string>('codeTracking.githubUsername');
   const configuredTimeZone = vscode.workspace.getConfiguration().get<string>('codeTracking.timeZone');
   // Auto-detect the system timezone if no configuration is provided.
-  const effectiveTimeZone = configuredTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone; 
+  const effectiveTimeZone = configuredTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Read the user-defined interval (default to 30 if not set)
+  const commitIntervalMinutes = vscode.workspace.getConfiguration().get<number>('commitInterval', 30);
+  const commitIntervalMs = commitIntervalMinutes * 60 * 1000; // Convert minutes to ms
+
 
   if (!githubToken || !githubUsername) {
     const errorMsg = 'GitHub token and username must be set in settings (codeTracking.githubToken and codeTracking.githubUsername).';
