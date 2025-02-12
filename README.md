@@ -72,7 +72,7 @@ Replace the placeholders with your actual GitHub token, username, and desired ti
 
 ## Changelog
 
-### 1.2.1
+### 1.2.2
 - **New Features:**
   - Auto-detection of system timezone with an optional override via settings.
   - Enhanced logging with detailed timestamps (including timezone information) in both commit messages and output channel logs.
@@ -89,7 +89,7 @@ This project is licensed under the [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! If you have suggestions for improvements or encounter any issues, please open an issue or submit a pull request @ [Flaunt Github](https://github.com/vib795/flaunt-github/).
+Contributions are welcome! If you have suggestions for improvements or encounter any issues, please contact the author at flauntgithub@gmail.com or submit a pull request @ [Flaunt Github](https://github.com/vib795/flaunt-github/).
 
 
 # **Flaunt your progress. Flaunt GitHub!**
