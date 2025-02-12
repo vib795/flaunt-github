@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "flaunt-github",
   "description": "",
-  "version": "1.0.4",
+  "version": "1.2.0",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "repository": {
@@ -23,8 +23,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "flaunt-github.helloWorld",
-        "title": "Hello World"
+        "command": "codeTracking.start",
+        "title": "Start Code Tracking"
       }
     ],
     "configuration": {
