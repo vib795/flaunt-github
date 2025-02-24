@@ -11,7 +11,7 @@
   Every time you save a file (either manually or via auto-save), a timestamped log entry is added to an in‑memory summary. This log captures the filename and the exact time of the save.
 
 - **Periodic GitHub Commits:**  
-  At regular intervals (defaulting to every 30 minutes), the extension appends the accumulated log to a file (`coding_summary.txt`), commits it to your local clone with a detailed timestamp (showing your timezone), and pushes the commit to GitHub. **You can customize the interval** (in minutes) via a user setting.
+  At regular intervals (defaulting to every 30 minutes), the extension appends the accumulated log to a file (`coding_summary.txt`), commits it to your local clone with a detailed timestamp (showing your timezone), and pushes the commit to GitHub. **You can customize the interval** (in minutes) via a user setting—any changes to this setting are applied immediately without needing a VS Code reload.
 
 - **Manual Commit Trigger:**  
   You can manually trigger a commit via the Command Palette (the command is registered as **Start Code Tracking**). This is useful if you want to capture your progress immediately.
@@ -54,7 +54,7 @@ After installing the extension, you need to configure your GitHub credentials an
 - **`codeTracking.githubToken`**: Your GitHub PAT (with `public_repo` or `repo` scopes).  
 - **`codeTracking.githubUsername`**: Your GitHub username.  
 - **`codeTracking.timeZone`** *(optional)*: A valid timezone string (e.g., `"America/New_York"`). If omitted, your system timezone is used.  
-- **`codeTracking.commitInterval`** *(optional)*: Interval (in minutes) for automatic commits. Defaults to 30.
+- **`codeTracking.commitInterval`** *(optional)*: Interval (in minutes) for automatic commits. Defaults to 30. **Note**: This value is applied immediately if changed in Settings—no VS Code reload required.
 
 ## Usage
 
@@ -65,7 +65,7 @@ After installing the extension, you need to configure your GitHub credentials an
    Every time you save a file (whether via auto-save or manually using <kbd>Cmd+S</kbd>/<kbd>Ctrl+S</kbd>), the extension logs the event with a timestamp (including your timezone) to its in‑memory summary.
 
 3. **Periodic Commits:**  
-   By default, the extension automatically commits the accumulated log entries every 30 minutes. If you changed the interval in your settings, it will commit accordingly. The commit message will include a timestamp formatted like:  
+   By default, the extension automatically commits the accumulated log entries every 30 minutes. If you changed the interval in your settings, it will commit accordingly—**instantly** adapting to the new interval. The commit message will include a timestamp formatted like:  
    `Coding activity summary - 2/12/2025, 3:39:03 AM EDT`
 
 4. **Manual Commit:**  
@@ -76,10 +76,11 @@ After installing the extension, you need to configure your GitHub credentials an
 
 ## Changelog
 
-### 1.3.0
+### 1.4.0
 - **New Features:**
   - Auto-detection of system timezone with an optional override via settings.
-  - **Configurable commit interval** via `codeTracking.commitInterval` (defaulting to 30 minutes).
+  - **Configurable commit interval** (via `codeTracking.commitInterval`), which now **dynamically updates** without needing a VS Code reload.
+  - **Automatic conflict resolution** using the “theirs” merge strategy before pushing commits, preventing manual merges across multiple machines.
   - Enhanced logging with detailed timestamps (including timezone information) in both commit messages and output channel logs.
   - Improved repository validation to ensure the local clone is a valid Git repository.
 

@@ -1,166 +1,209 @@
 import * as vscode from 'vscode';
 import { Octokit } from '@octokit/rest';
 import simpleGit, { SimpleGit } from 'simple-git';
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 
 let git: SimpleGit;
+let codingSummary = '';
+let outputChannel: vscode.OutputChannel | undefined;
+
+// We'll store our commit timer in this variable
+let commitTimer: NodeJS.Timeout | undefined;
+
 const SUMMARY_FILENAME = 'coding_summary.txt';
-let codingSummary: string = '';
-let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Create and show the output channel.
-  outputChannel = vscode.window.createOutputChannel("FlauntGitHubLog");
-  outputChannel.show(true);
-  outputChannel.appendLine("Activating Code Tracking Extension...");
+  // Create the output channel once
+  outputChannel = vscode.window.createOutputChannel('FlauntGitHubLog');
+  logMessage('Flaunt GitHub: Extension Activated!');
 
-  vscode.window.showInformationMessage('Code Tracking Extension Activated!');
-  outputChannel.appendLine("Info: Code Tracking Extension Activated!");
-
-  // Retrieve settings (GitHub token, username, and optional timezone override).
-  const githubToken = vscode.workspace.getConfiguration().get<string>('codeTracking.githubToken');
-  const githubUsername = vscode.workspace.getConfiguration().get<string>('codeTracking.githubUsername');
-  const configuredTimeZone = vscode.workspace.getConfiguration().get<string>('codeTracking.timeZone');
-  // Auto-detect the system timezone if no configuration is provided.
-  const effectiveTimeZone = configuredTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  // Read the user-defined interval (default to 30 if not set)
-  const commitIntervalMinutes = vscode.workspace.getConfiguration().get<number>('commitInterval', 30);
-  const commitIntervalMs = commitIntervalMinutes * 60 * 1000; // Convert minutes to ms
-
+  // 1. Retrieve settings
+  const config = vscode.workspace.getConfiguration('codeTracking');
+  const githubToken = config.get<string>('githubToken');
+  const githubUsername = config.get<string>('githubUsername');
+  const commitInterval = config.get<number>('commitInterval', 30); // default 30 minutes
 
   if (!githubToken || !githubUsername) {
-    const errorMsg = 'GitHub token and username must be set in settings (codeTracking.githubToken and codeTracking.githubUsername).';
-    vscode.window.showErrorMessage(errorMsg);
-    outputChannel.appendLine(`Error: ${errorMsg}`);
+    vscode.window.showErrorMessage(
+      'Please set "codeTracking.githubToken" and "codeTracking.githubUsername" in VS Code Settings.'
+    );
     return;
   }
 
-  // Initialize Octokit.
+  // 2. Initialize the GitHub API client
   const octokit = new Octokit({ auth: githubToken });
   const repoName = 'code-tracking';
+  const owner = githubUsername;
 
-  // Check if the repository exists on GitHub.
-  try {
-    await octokit.repos.get({ owner: githubUsername, repo: repoName });
-    vscode.window.showInformationMessage(`Repository '${repoName}' exists.`);
-    outputChannel.appendLine(`Repository '${repoName}' exists.`);
-  } catch (error: any) {
-    if (error.status === 404) {
-      try {
-        await octokit.repos.createForAuthenticatedUser({
-          name: repoName,
-          auto_init: true,
-          private: true
-        });
-        vscode.window.showInformationMessage(`Repository '${repoName}' created successfully.`);
-        outputChannel.appendLine(`Repository '${repoName}' created successfully.`);
-      } catch (createError: any) {
-        const errMsg = `Failed to create repository: ${createError.message}`;
-        vscode.window.showErrorMessage(errMsg);
-        outputChannel.appendLine(`Error: ${errMsg}`);
-        return;
-      }
-    } else {
-      const errMsg = `Error checking repository: ${error.message}`;
-      vscode.window.showErrorMessage(errMsg);
-      outputChannel.appendLine(`Error: ${errMsg}`);
-      return;
-    }
+  // 3. Ensure the GitHub repository exists
+  const repoExists = await ensureRepoExists(octokit, owner, repoName);
+  if (!repoExists) {
+    return; // Repository creation failed
   }
 
-  // Set up a local directory for the repository using the extension's global storage path.
+  // 4. Prepare local clone
   const localRepoPath = path.join(context.globalStoragePath, repoName);
-  outputChannel.appendLine(`Local repository path: ${localRepoPath}`);
+  await ensureLocalClone(localRepoPath, owner, repoName);
 
-  // Verify that the local folder is a valid Git repository.
-  const gitFolderPath = path.join(localRepoPath, ".git");
-  if (!fs.existsSync(localRepoPath) || !fs.existsSync(gitFolderPath)) {
-    if (fs.existsSync(localRepoPath)) {
-      fs.rmSync(localRepoPath, { recursive: true, force: true });
-      outputChannel.appendLine("Removed incomplete local repository folder.");
-    }
-    fs.mkdirSync(localRepoPath, { recursive: true });
-    git = simpleGit();
-    try {
-      // Clone the repository (token included in URL for authentication).
-      await git.clone(`https://${githubToken}@github.com/${githubUsername}/${repoName}.git`, localRepoPath);
-      vscode.window.showInformationMessage('Repository cloned locally.');
-      outputChannel.appendLine('Repository cloned locally.');
-    } catch (cloneError: any) {
-      const errMsg = `Failed to clone repository: ${cloneError.message}`;
-      vscode.window.showErrorMessage(errMsg);
-      outputChannel.appendLine(`Error: ${errMsg}`);
-      return;
-    }
-  } else {
-    git = simpleGit(localRepoPath);
-    outputChannel.appendLine('Using existing local repository.');
-  }
+  // Initialize simple-git
+  git = simpleGit(localRepoPath);
 
-  // Listen to file save events.
+  // 5. Listen for file save events
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(document => {
-      const timestamp = new Date().toLocaleTimeString(undefined, { timeZone: effectiveTimeZone, timeZoneName: 'short' });
-      const message = `[${timestamp}]: Saved ${document.fileName}`;
-      codingSummary += message + '\n';
-      outputChannel.appendLine(message);
-      console.log(message);
+      const timestamp = new Date().toLocaleString();
+      const logLine = `[${timestamp}]: Saved ${document.fileName}`;
+      codingSummary += logLine + '\n';
+      logMessage(`Captured save event: ${logLine}`);
     })
   );
 
-  // Set up a timer to commit coding summaries.
-  // (For testing, interval is set to 30 minutes.)
-  const commitInterval = 30 * 60 * 1000;
-  setInterval(async () => {
-    outputChannel.appendLine('Attempting to commit coding summary...');
-    await commitCodingSummary(localRepoPath, githubUsername, effectiveTimeZone);
-    codingSummary = '';
-  }, commitInterval);
+  // 6. Create initial commit timer
+  createOrUpdateCommitTimer(commitInterval, localRepoPath);
 
-  // Register a command for manual commit.
-  let disposable = vscode.commands.registerCommand('codeTracking.start', async () => {
-    outputChannel.appendLine('Manual commit triggered.');
-    await commitCodingSummary(localRepoPath, githubUsername, effectiveTimeZone);
-    vscode.window.showInformationMessage('Manual commit of coding summary executed.');
+  // 7. Listen for changes to the config, so we can update the timer if needed
+  vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration('codeTracking.commitInterval')) {
+      const newConfig = vscode.workspace.getConfiguration('codeTracking');
+      const newInterval = newConfig.get<number>('commitInterval', 30);
+      logMessage(`Detected new commit interval setting: ${newInterval} min`);
+      vscode.window.showInformationMessage(`FlauntGitHub: Updating commit interval to ${newInterval} minute(s).`);
+
+      createOrUpdateCommitTimer(newInterval, localRepoPath);
+    }
   });
-  context.subscriptions.push(disposable);
-}
 
-async function commitCodingSummary(localRepoPath: string, githubUsername: string, timeZone: string) {
-  if (!codingSummary) {
-    outputChannel.appendLine("No coding summary to commit.");
-    return;
-  }
+  // 8. Manual commit command
+  const manualCommitCommand = vscode.commands.registerCommand('codeTracking.start', async () => {
+    await commitAndPush(localRepoPath);
+    vscode.window.showInformationMessage('Manual commit triggered!');
+  });
+  context.subscriptions.push(manualCommitCommand);
 
-  const summaryFilePath = path.join(localRepoPath, SUMMARY_FILENAME);
-  try {
-    // Append the summary to the log file.
-    fs.appendFileSync(summaryFilePath, codingSummary, { encoding: 'utf8' });
-    outputChannel.appendLine("Appended coding summary to file.");
-
-    // Ensure we're in the correct repository directory.
-    await git.cwd(localRepoPath);
-    await git.add(SUMMARY_FILENAME);
-    const commitMessage = `Coding activity summary - ${new Date().toLocaleString(undefined, { timeZone: timeZone, timeZoneName: 'short' })}`;
-    await git.commit(commitMessage);
-    outputChannel.appendLine(`Committed with message: ${commitMessage}`);
-
-    // Push the commit.
-    await git.push('origin', 'main');
-    const pushTime = new Date().toLocaleTimeString(undefined, { timeZone: timeZone, timeZoneName: 'short' });
-    vscode.window.showInformationMessage(`Committed coding summary at ${pushTime}`);
-    outputChannel.appendLine(`Pushed coding summary to GitHub at ${pushTime}`);
-  } catch (error: any) {
-    const errMsg = `Error committing coding summary: ${error.message}`;
-    vscode.window.showErrorMessage(errMsg);
-    outputChannel.appendLine(`Error: ${errMsg}`);
-  }
+  logMessage(`Extension fully activated. Using local repo at: ${localRepoPath}`);
 }
 
 export function deactivate() {
-  if (outputChannel) {
-    outputChannel.dispose();
+  logMessage('Flaunt GitHub: Extension Deactivated');
+}
+
+/**
+ * Creates or updates the periodic commit timer with the given interval (in minutes).
+ * If an existing timer is running, it clears it first.
+ */
+function createOrUpdateCommitTimer(intervalMinutes: number, localRepoPath: string) {
+  if (commitTimer) {
+    clearInterval(commitTimer);
+    logMessage(`Cleared previous commit timer.`);
   }
+  const intervalMs = intervalMinutes * 60 * 1000;
+  commitTimer = setInterval(async () => {
+    await commitAndPush(localRepoPath);
+  }, intervalMs);
+  logMessage(`Created a new commit timer: every ${intervalMinutes} minute(s).`);
+}
+
+/**
+ * Checks if a "code-tracking" repo exists for the user; creates if not found.
+ */
+async function ensureRepoExists(octokit: Octokit, owner: string, repo: string): Promise<boolean> {
+  try {
+    await octokit.repos.get({ owner, repo });
+    logMessage(`Repository "${repo}" already exists for user "${owner}".`);
+    return true;
+  } catch (error: any) {
+    if (error.status === 404) {
+      logMessage(`Repository "${repo}" not found. Creating a private repo...`);
+      try {
+        await octokit.repos.createForAuthenticatedUser({
+          name: repo,
+          private: true,
+          auto_init: true
+        });
+        logMessage(`Repository "${repo}" created successfully.`);
+        return true;
+      } catch (creationError: any) {
+        vscode.window.showErrorMessage(`Failed to create repository: ${creationError.message}`);
+        logMessage(`Failed to create repository: ${creationError.message}`);
+        return false;
+      }
+    } else {
+      vscode.window.showErrorMessage(`Error checking repository: ${error.message}`);
+      logMessage(`Error checking repository: ${error.message}`);
+      return false;
+    }
+  }
+}
+
+/**
+ * Ensures we have a local clone of the repo. Clones if folder doesn't exist.
+ */
+async function ensureLocalClone(localRepoPath: string, owner: string, repo: string) {
+  if (!fs.existsSync(localRepoPath)) {
+    fs.mkdirSync(localRepoPath, { recursive: true });
+    const tmpGit = simpleGit();
+    try {
+      logMessage(`Cloning "https://github.com/${owner}/${repo}.git" into "${localRepoPath}"...`);
+      await tmpGit.clone(`https://github.com/${owner}/${repo}.git`, localRepoPath);
+      logMessage('Clone successful.');
+    } catch (cloneError: any) {
+      vscode.window.showErrorMessage(`Failed to clone repository: ${cloneError.message}`);
+      logMessage(`Failed to clone repository: ${cloneError.message}`);
+    }
+  } else {
+    logMessage(`Local repo folder already exists at "${localRepoPath}". Using existing clone.`);
+  }
+}
+
+/**
+ * Commits the in-memory summary to the local repo, merging remote changes first
+ * with "--strategy-option=theirs" so that remote changes win if conflicts occur.
+ */
+async function commitAndPush(localRepoPath: string) {
+  if (!codingSummary) {
+    // Nothing to commit
+    return;
+  }
+
+  try {
+    // 1. Fetch latest from remote
+    await git.fetch();
+    logMessage('Fetched latest from origin/main.');
+
+    // 2. Merge with "theirs" strategy
+    await git.merge(['origin/main', '--strategy-option=theirs']);
+    logMessage('Merged remote changes using "--strategy-option=theirs".');
+
+    // 3. Append local summary to coding_summary.txt
+    const summaryFilePath = path.join(localRepoPath, SUMMARY_FILENAME);
+    fs.appendFileSync(summaryFilePath, codingSummary, { encoding: 'utf8' });
+    logMessage('Appended in-memory summary to coding_summary.txt.');
+
+    // 4. Add, commit, push
+    await git.add(SUMMARY_FILENAME);
+    const commitMessage = `Coding activity summary - ${new Date().toLocaleString()}`;
+    await git.commit(commitMessage);
+    await git.push('origin', 'main');
+
+    logMessage(`Committed & pushed with message: "${commitMessage}".`);
+  } catch (error: any) {
+    vscode.window.showErrorMessage(`Error during commit/push: ${error.message}`);
+    logMessage(`Error during commit/push: ${error.message}`);
+  } finally {
+    // Reset in-memory summary
+    codingSummary = '';
+  }
+}
+
+/**
+ * Writes a message to the "FlauntGitHubLog" output channel.
+ * Only created once in `activate()`, avoiding duplicates.
+ */
+function logMessage(msg: string) {
+  if (!outputChannel) {
+    outputChannel = vscode.window.createOutputChannel('FlauntGitHubLog');
+  }
+  const time = new Date().toLocaleTimeString();
+  outputChannel.appendLine(`[${time}] ${msg}`);
 }
