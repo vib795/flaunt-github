@@ -4,29 +4,42 @@
 
 ## Features
 
-- **Automatic Repository Management:**  
+- **Automatic Repository Management**  
   On activation, the extension checks if a repository named `code-tracking` exists in your GitHub account. If not, it automatically creates the repository and clones it locally into the extension’s global storage path.
 
-- **Activity Logging:**  
-  Every time you save a file (either manually or via auto-save), a timestamped log entry is added to an in‑memory summary. This log captures the filename and the exact time of the save.
+- **Activity Logging (Saves & Optional Opens)**  
+  - **File Saves**: Each time you save a file (manually or via auto-save), the extension logs the event with a timestamp and filename.  
+  - **File Opens**: Optionally track file open events if `"codeTracking.trackFileOpens"` is set to `true`. This captures a timestamp and filename when a file is opened.
 
-- **Periodic GitHub Commits:**  
-  At regular intervals (defaulting to every 30 minutes), the extension appends the accumulated log to a file (`coding_summary.txt`), commits it to your local clone with a detailed timestamp (showing your timezone), and pushes the commit to GitHub. **You can customize the interval** (in minutes) via a user setting—any changes to this setting are applied immediately without needing a VS Code reload.
+- **Periodic GitHub Commits**  
+  At regular intervals (defaulting to every 30 minutes), the extension appends the accumulated log to a file (`coding_summary.txt`), commits it to your local clone with a detailed timestamp (including your timezone), and pushes the commit to GitHub. **You can customize the interval** (in minutes) via a user setting—any changes to this setting are applied immediately without needing a VS Code reload.
 
-- **Manual Commit Trigger:**  
+- **Countdown Timer in the Status Bar**  
+  A status bar item displays a live countdown to the next scheduled commit, updating every second.
+
+- **Manual Commit Trigger**  
   You can manually trigger a commit via the Command Palette (the command is registered as **Start Code Tracking**). This is useful if you want to capture your progress immediately.
 
-- **Timezone-Aware Timestamps:**  
-  The commit messages and log entries include timestamps formatted with your local timezone. The extension auto-detects your system’s timezone but also allows you to override it via a setting (for example, `"America/New_York"`).
+- **Commit Message Prefix**  
+  Optionally, define a prefix (via `"codeTracking.commitMessagePrefix"`) that will be prepended to your commit messages.
 
-- **Output Channel Logging:**  
-  An output channel named **FlauntGitHubLog** is created and displayed so you can easily monitor the extension’s actions, such as repository creation, cloning, file saves, commits, and pushes.
+- **Milestone Notifications**  
+  Every 10 commits, the extension celebrates your progress with an in-editor notification.
+
+- **Timezone-Aware Timestamps**  
+  Timestamps in commit messages and log entries are formatted based on your local timezone. The extension auto-detects your system’s timezone but allows you to override it via settings (e.g., `"America/New_York"`).
+
+- **Automatic Conflict Resolution**  
+  Before each commit, the extension fetches and merges remote changes using the “theirs” merge strategy, preventing manual merge conflicts when multiple machines commit to the same repository.
+
+- **Output Channel Logging**  
+  All extension activities (repository management, file saves/opens, commits, pushes, errors, etc.) are logged to an output channel named **FlauntGitHubLog**.
 
 ## Requirements
 
 - **GitHub Account & Personal Access Token (PAT):**  
-  You must have a GitHub account and a Personal Access Token with the appropriate scopes:
-  - For public repositories: `public_repo`
+  You must have a GitHub account and a Personal Access Token with the appropriate scopes:  
+  - For public repositories: `public_repo`  
   - For private repositories: `repo`
 
 - **Visual Studio Code:**  
@@ -34,27 +47,36 @@
 
 ## Configuration
 
-After installing the extension, you need to configure your GitHub credentials and (optionally) your preferred timezone and commit interval in your VS Code settings. Open your settings (via **File > Preferences > Settings** or by editing your `settings.json`) and add:
+After installing the extension, configure your GitHub credentials and (optionally) your preferred timezone, commit interval, commit message prefix, and file open tracking in your VS Code settings. Open **File > Preferences > Settings** or edit your `settings.json` and add:
 
-```json
+```jsonc
 {
   "codeTracking.githubToken": "YOUR_GITHUB_PERSONAL_ACCESS_TOKEN",
   "codeTracking.githubUsername": "YOUR_GITHUB_USERNAME",
 
-  // Optional: override the auto-detected timezone. If not set, 
+  // Optional: Override the auto-detected timezone. If not set,
   // the extension uses your system's timezone.
   "codeTracking.timeZone": "America/New_York",
 
-  // Optional: customize how often (in minutes) the extension commits your 
+  // Optional: Customize how often (in minutes) the extension commits your 
   // coding summary. Defaults to 30 if not set.
-  "codeTracking.commitInterval": 15
+  "codeTracking.commitInterval": 15,
+
+  // Optional: Define a prefix for commit messages (e.g., "[Flaunt]").
+  "codeTracking.commitMessagePrefix": "[Flaunt]",
+
+  // Optional: Track file open events. If true, logs whenever a file is opened.
+  // Defaults to false.
+  "codeTracking.trackFileOpens": true
 }
 ```
 
 - **`codeTracking.githubToken`**: Your GitHub PAT (with `public_repo` or `repo` scopes).  
 - **`codeTracking.githubUsername`**: Your GitHub username.  
-- **`codeTracking.timeZone`** *(optional)*: A valid timezone string (e.g., `"America/New_York"`). If omitted, your system timezone is used.  
-- **`codeTracking.commitInterval`** *(optional)*: Interval (in minutes) for automatic commits. Defaults to 30. **Note**: This value is applied immediately if changed in Settings—no VS Code reload required.
+- **`codeTracking.timeZone`** *(optional)*: A valid timezone string (e.g., `"America/New_York"`). If omitted, the system's timezone is used.  
+- **`codeTracking.commitInterval`** *(optional)*: The commit interval in minutes. Defaults to 30. Changes take effect immediately.  
+- **`codeTracking.commitMessagePrefix`** *(optional)*: A prefix to add to commit messages.  
+- **`codeTracking.trackFileOpens`** *(optional)*: Set to `true` to log file open events; defaults to `false`.
 
 ## Usage
 
@@ -62,31 +84,40 @@ After installing the extension, you need to configure your GitHub credentials an
    When you launch VS Code, the extension activates (via the `onStartupFinished` activation event) and logs a message to the **FlauntGitHubLog** output channel.
 
 2. **Activity Logging:**  
-   Every time you save a file (whether via auto-save or manually using <kbd>Cmd+S</kbd>/<kbd>Ctrl+S</kbd>), the extension logs the event with a timestamp (including your timezone) to its in‑memory summary.
+   - **File Saves:** Every time you save a file (via auto-save or manually), an entry is logged with a timestamp and filename.  
+   - **File Opens (Optional):** If enabled, file open events are logged similarly.
 
-3. **Periodic Commits:**  
-   By default, the extension automatically commits the accumulated log entries every 30 minutes. If you changed the interval in your settings, it will commit accordingly—**instantly** adapting to the new interval. The commit message will include a timestamp formatted like:  
-   `Coding activity summary - 2/12/2025, 3:39:03 AM EDT`
+3. **Periodic Commits & Countdown:**  
+   The extension automatically commits the accumulated log entries at the configured interval. A status bar countdown shows how long until the next commit. The commit message includes your optional prefix and a timezone-aware timestamp.
 
 4. **Manual Commit:**  
-   You can manually trigger a commit by opening the Command Palette (<kbd>Cmd+Shift+P</kbd> on macOS or <kbd>Ctrl+Shift+P</kbd> on Windows/Linux) and selecting **Start Code Tracking**.
+   Trigger an immediate commit by opening the Command Palette (<kbd>Cmd+Shift+P</kbd> on macOS or <kbd>Ctrl+Shift+P</kbd> on Windows/Linux) and selecting **Start Code Tracking**.
 
-5. **View Logs:**  
-   Open the **Output** panel (via **View > Output**) and select **FlauntGitHubLog** from the dropdown to see detailed logs of the extension’s operations.
+5. **Conflict Resolution:**  
+   Before each commit, the extension fetches and merges remote changes using the “theirs” merge strategy, ensuring conflict-free pushes.
+
+6. **Milestone Notifications:**  
+   Every 10 commits, you'll receive a celebratory notification in VS Code.
+
+7. **Viewing Logs:**  
+   Open the **Output** panel (via **View > Output**) and select **FlauntGitHubLog** to see detailed logs of all extension operations.
 
 ## Changelog
 
-### 1.4.0
+### 1.5.0
 - **New Features:**
-  - Auto-detection of system timezone with an optional override via settings.
-  - **Configurable commit interval** (via `codeTracking.commitInterval`), which now **dynamically updates** without needing a VS Code reload.
-  - **Automatic conflict resolution** using the “theirs” merge strategy before pushing commits, preventing manual merges across multiple machines.
-  - Enhanced logging with detailed timestamps (including timezone information) in both commit messages and output channel logs.
-  - Improved repository validation to ensure the local clone is a valid Git repository.
+  - **File Open Logging (Optional):** When `"codeTracking.trackFileOpens"` is set to `true`, logs file open events.
+  - **Status Bar Countdown:** Displays a live countdown until the next scheduled commit.
+  - **Commit Message Prefix:** Configurable via `"codeTracking.commitMessagePrefix"`, prepended to commit messages.
+  - **Milestone Notifications:** Notifies every 10 commits.
+  - **Dynamic Commit Interval:** Updates commit interval in real time without requiring a VS Code reload.
+  - **Automatic Conflict Resolution:** Uses the “theirs” merge strategy before committing to prevent manual merge conflicts.
+  - **Enhanced Logging:** Detailed timestamps and comprehensive logging in the output channel.
 
-- **Bug Fixes:**
-  - Fixed issues related to reading configuration settings.
-  - Addressed errors when the local repository folder was not properly set up.
+- **Improvements & Fixes:**
+  - Better repository validation and local clone management.
+  - Improved dynamic settings handling for commit interval, commit message prefix, and file open tracking.
+  - Various bug fixes related to configuration reading and local storage.
 
 ## License
 
@@ -94,7 +125,7 @@ This project is licensed under the [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! If you have suggestions for improvements or encounter any issues, please contact the author at flauntgithub@gmail.com or submit a pull request or raise an issue @ [Flaunt Github](https://github.com/vib795/flaunt-github/).
+Contributions are welcome! If you have suggestions for improvements or encounter any issues, please contact the author at flauntgithub@gmail.com or submit a pull request or open an issue at [Flaunt GitHub](https://github.com/vib795/flaunt-github/).
 
 ---
 
