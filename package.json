@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "flaunt-github",
   "description": "",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "repository": {
@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "^20.17.23",
+    "@types/node": "^20.17.24",
     "@types/vscode": "^1.70.0",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",

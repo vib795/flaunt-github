@@ -16,51 +16,58 @@ let commitCount: number = 0;
 const SUMMARY_FILENAME = 'coding_summary.txt';
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Create the output channel (only once)
+  // Create the output channel and show it automatically
   outputChannel = vscode.window.createOutputChannel('FlauntGitHubLog');
+  outputChannel.show(true);
   logMessage('Flaunt GitHub: Extension Activated!');
 
-  // Create a status bar item to show next commit countdown
+  // Create a status bar item to show the countdown until the next commit
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.tooltip = 'Time until next commit';
   statusBarItem.show();
 
-  // Retrieve user settings from VS Code Settings (settings.json)
-  const config = vscode.workspace.getConfiguration('codeTracking');
-  const githubToken = config.get<string>('githubToken');
-  const githubUsername = config.get<string>('githubUsername');
-  const commitInterval = config.get<number>('commitInterval', 30); // in minutes, default 30
-  const commitMessagePrefix = config.get<string>('commitMessagePrefix', '');
-  const timeZone = config.get<string>('timeZone', Intl.DateTimeFormat().resolvedOptions().timeZone);
-  const trackFileOpens = config.get<boolean>('trackFileOpens', false); // new setting
-  // const commitIntervalMs = commitInterval * 60 * 1000;
-
-  if (!githubToken || !githubUsername) {
-    vscode.window.showErrorMessage(
-      'Please set "codeTracking.githubToken" and "codeTracking.githubUsername" in Settings.'
-    );
+  // Get GitHub authentication session using the built-in GitHub provider.
+  let githubToken: string | undefined;
+  let githubUsername: string | undefined;
+  try {
+    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+    if (session) {
+      githubToken = session.accessToken;
+      githubUsername = session.account.label;
+      logMessage(`Authenticated as ${githubUsername}`);
+    }
+  } catch (authError: any) {
+    vscode.window.showErrorMessage('GitHub authentication failed. Please sign in.');
+    logMessage(`GitHub authentication failed: ${authError.message}`);
     return;
   }
 
-  // Initialize the GitHub API client
+  if (!githubToken || !githubUsername) {
+    vscode.window.showErrorMessage('GitHub token or username is missing. Please sign in.');
+    return;
+  }
+
+  // Retrieve additional user settings
+  const config = vscode.workspace.getConfiguration('codeTracking');
+  const commitInterval = config.get<number>('commitInterval', 30);
+  const commitMessagePrefix = config.get<string>('commitMessagePrefix', '');
+  const timeZone = config.get<string>('timeZone', Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const trackFileOpens = config.get<boolean>('trackFileOpens', false);
+
+  // Initialize Octokit and repository info
   const octokit = new Octokit({ auth: githubToken });
   const repoName = 'code-tracking';
   const owner = githubUsername;
 
-  // Ensure the GitHub repository exists; create if not
   const repoExists = await ensureRepoExists(octokit, owner, repoName);
-  if (!repoExists) {
-    return;
-  }
+  if (!repoExists) return;
 
-  // Prepare local clone of the repository
   const localRepoPath = path.join(context.globalStoragePath, repoName);
   await ensureLocalClone(localRepoPath, owner, repoName);
 
-  // Initialize simple-git in the local repo
   git = simpleGit(localRepoPath);
 
-  // Listen for file save events to accumulate coding summary
+  // Listen for file save events
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(document => {
       const timestamp = new Date().toLocaleString(undefined, { timeZone });
@@ -70,7 +77,7 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // (Optional) Log file open events, if user enabled it
+  // Optionally, listen for file open events
   if (trackFileOpens) {
     context.subscriptions.push(
       vscode.workspace.onDidOpenTextDocument(document => {
@@ -82,10 +89,10 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  // Create the commit timer (and status bar countdown) using the current interval
+  // Create commit timer and status bar countdown
   createOrUpdateCommitTimer(commitInterval, localRepoPath, commitMessagePrefix, timeZone);
 
-  // Listen for configuration changes so that the commit interval, prefix, or trackFileOpens update dynamically
+  // Listen for configuration changes to update settings dynamically
   vscode.workspace.onDidChangeConfiguration(event => {
     if (
       event.affectsConfiguration('codeTracking.commitInterval') ||
@@ -96,24 +103,16 @@ export async function activate(context: vscode.ExtensionContext) {
       const newInterval = newConfig.get<number>('commitInterval', 30);
       const newPrefix = newConfig.get<string>('commitMessagePrefix', '');
       const newTrackOpens = newConfig.get<boolean>('trackFileOpens', false);
-
-      logMessage(`Detected updated settings: commitInterval = ${newInterval} min, prefix = "${newPrefix}", trackFileOpens = ${newTrackOpens}`);
-      vscode.window.showInformationMessage(`FlauntGitHub: Updating settings...`);
-
-      // Recreate the commit timer
+      logMessage(`Updated settings: commitInterval = ${newInterval} min, prefix = "${newPrefix}", trackFileOpens = ${newTrackOpens}`);
+      vscode.window.showInformationMessage('FlauntGitHub: Updating settings...');
       createOrUpdateCommitTimer(newInterval, localRepoPath, newPrefix, timeZone);
-
-      // If the user toggled trackFileOpens, we can't dynamically unhook existing listeners,
-      // but we can warn them that a reload might be needed to fully apply changes.
       if (newTrackOpens !== trackFileOpens) {
-        vscode.window.showInformationMessage(
-          'FlauntGitHub: Changes to "trackFileOpens" will apply after a reload.'
-        );
+        vscode.window.showInformationMessage('Changes to "trackFileOpens" will apply after a reload.');
       }
     }
   });
 
-  // Register a manual commit command (trigger via Command Palette)
+  // Register manual commit command
   const manualCommitCommand = vscode.commands.registerCommand('codeTracking.start', async () => {
     await commitAndPush(localRepoPath, commitMessagePrefix, timeZone);
     vscode.window.showInformationMessage('Manual commit triggered!');
@@ -125,21 +124,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   logMessage('Flaunt GitHub: Extension Deactivated');
-  if (statusBarItem) {
-    statusBarItem.dispose();
-  }
-  if (commitTimer) {
-    clearInterval(commitTimer);
-  }
-  if (countdownTimer) {
-    clearInterval(countdownTimer);
-  }
+  if (statusBarItem) statusBarItem.dispose();
+  if (commitTimer) clearInterval(commitTimer);
+  if (countdownTimer) clearInterval(countdownTimer);
 }
 
-/**
- * Creates or updates the periodic commit timer and status bar countdown.
- * When the timer is set, nextCommitTime is updated accordingly.
- */
 function createOrUpdateCommitTimer(intervalMinutes: number, localRepoPath: string, commitMessagePrefix: string, timeZone: string) {
   if (commitTimer) {
     clearInterval(commitTimer);
@@ -152,45 +141,29 @@ function createOrUpdateCommitTimer(intervalMinutes: number, localRepoPath: strin
   }, intervalMs);
   logMessage(`Created new commit timer: every ${intervalMinutes} minute(s).`);
 
-  // Update status bar countdown every second
-  if (countdownTimer) {
-    clearInterval(countdownTimer);
-  }
+  if (countdownTimer) clearInterval(countdownTimer);
   countdownTimer = setInterval(() => {
     const now = Date.now();
     const diff = Math.max(nextCommitTime - now, 0);
     const minutes = Math.floor(diff / 60000);
     const seconds = Math.floor((diff % 60000) / 1000);
     statusBarItem.text = `Next commit in ${minutes}m ${seconds}s`;
-    if (diff <= 0) {
-      nextCommitTime = Date.now() + intervalMs;
-    }
+    if (diff <= 0) nextCommitTime = Date.now() + intervalMs;
   }, 1000);
 }
 
-/**
- * Commits the in-memory coding summary to the local repository.
- * It fetches and merges remote changes using "--strategy-option=theirs" to avoid manual conflicts,
- * then appends the local summary to the summary file, commits, and pushes the changes.
- */
 async function commitAndPush(localRepoPath: string, commitMessagePrefix: string, timeZone: string) {
-  if (!codingSummary) {
-    return;
-  }
+  if (!codingSummary) return;
   try {
-    // Fetch latest changes from remote
     await git.fetch();
     logMessage('Fetched latest from origin/main.');
-    // Merge using "theirs" strategy to auto-resolve conflicts in favor of remote changes
     await git.merge(['origin/main', '--strategy-option=theirs']);
     logMessage('Merged remote changes using "--strategy-option=theirs".');
 
-    // Append the in-memory coding summary to the summary file
     const summaryFilePath = path.join(localRepoPath, SUMMARY_FILENAME);
     fs.appendFileSync(summaryFilePath, codingSummary, { encoding: 'utf8' });
     logMessage('Appended in-memory summary to coding_summary.txt.');
 
-    // Stage, commit, and push changes
     await git.add(SUMMARY_FILENAME);
     const timestamp = new Date().toLocaleString(undefined, { timeZone });
     const commitMessage = `${commitMessagePrefix} Coding activity summary - ${timestamp}`.trim();
@@ -199,7 +172,6 @@ async function commitAndPush(localRepoPath: string, commitMessagePrefix: string,
     logMessage(`Committed & pushed with message: "${commitMessage}".`);
 
     commitCount++;
-    // Milestone notification every 10 commits
     if (commitCount % 10 === 0) {
       vscode.window.showInformationMessage(`Milestone reached: ${commitCount} commits! Keep up the great work!`);
     }
@@ -207,15 +179,10 @@ async function commitAndPush(localRepoPath: string, commitMessagePrefix: string,
     vscode.window.showErrorMessage(`Error during commit/push: ${error.message}`);
     logMessage(`Error during commit/push: ${error.message}`);
   } finally {
-    // Reset the in-memory summary
     codingSummary = '';
   }
 }
 
-/**
- * Checks if the "code-tracking" repository exists on GitHub.
- * If not found, attempts to create a private repository with auto_init.
- */
 async function ensureRepoExists(octokit: Octokit, owner: string, repo: string): Promise<boolean> {
   try {
     await octokit.repos.get({ owner, repo });
@@ -225,11 +192,7 @@ async function ensureRepoExists(octokit: Octokit, owner: string, repo: string): 
     if (error.status === 404) {
       logMessage(`Repository "${repo}" not found. Creating a private repo...`);
       try {
-        await octokit.repos.createForAuthenticatedUser({
-          name: repo,
-          private: true,
-          auto_init: true
-        });
+        await octokit.repos.createForAuthenticatedUser({ name: repo, private: true, auto_init: true });
         logMessage(`Repository "${repo}" created successfully.`);
         return true;
       } catch (creationError: any) {
@@ -245,10 +208,6 @@ async function ensureRepoExists(octokit: Octokit, owner: string, repo: string): 
   }
 }
 
-/**
- * Ensures a local clone of the repository exists.
- * If the folder does not exist, it clones the repository from GitHub.
- */
 async function ensureLocalClone(localRepoPath: string, owner: string, repo: string) {
   if (!fs.existsSync(localRepoPath)) {
     fs.mkdirSync(localRepoPath, { recursive: true });
@@ -266,12 +225,10 @@ async function ensureLocalClone(localRepoPath: string, owner: string, repo: stri
   }
 }
 
-/**
- * Logs a message to the "FlauntGitHubLog" output channel.
- */
 function logMessage(message: string) {
   if (!outputChannel) {
     outputChannel = vscode.window.createOutputChannel('FlauntGitHubLog');
+    outputChannel.show(true);
   }
   const time = new Date().toLocaleTimeString();
   outputChannel.appendLine(`[${time}] ${message}`);
