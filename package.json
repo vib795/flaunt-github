@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "flaunt-github",
   "description": "",
-  "version": "1.7.1",
+  "version": "1.7.0",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "repository": {
@@ -25,6 +25,10 @@
       {
         "command": "codeTracking.start",
         "title": "Start Code Tracking"
+      },
+      {
+        "command": "codeTracking.showMetrics",
+        "title": "Show Code Tracking Metrics"
       }
     ],
     "configuration": {

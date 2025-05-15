@@ -19,7 +19,6 @@ let commitCount = 0;
 let metricsService: MetricsService;
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Initialize MetricsService
   metricsService = new MetricsService(context);
 
   // Create and show output channel
@@ -32,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext) {
   statusBarItem.tooltip = 'Time until next commit';
   statusBarItem.show();
 
-  // Initial authentication
+  // Initial GitHub OAuth authentication
   let githubToken: string;
   let githubUsername: string;
   try {
@@ -67,53 +66,73 @@ export async function activate(context: vscode.ExtensionContext) {
   await ensureLocalClone(localRepoPath, githubUsername, REPO_NAME, githubToken);
   git = simpleGit(localRepoPath);
 
-  // Track file saves
+  // Track file saves (only file:// URIs)
   context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      const timestamp = new Date().toLocaleString(undefined, { timeZone });
-      const line = `[${timestamp}]: Saved ${doc.fileName}`;
+    vscode.workspace.onDidSaveTextDocument(doc => {
+      if (doc.uri.scheme !== 'file') {
+        return;
+      }
+      const ts = new Date().toLocaleString(undefined, { timeZone });
+      const relPath = vscode.workspace.workspaceFolders?.[0]
+        ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, doc.uri.fsPath)
+        : doc.fileName;
+      const line = `[${ts}]: Saved ${relPath}`;
       codingSummary += line + '\n';
       logMessage(line);
       metricsService.trackLanguage(doc);
     })
   );
 
-  // Optionally track file opens
+  // Optionally track file opens (only file:// URIs)
   if (trackFileOpens) {
     context.subscriptions.push(
-      vscode.workspace.onDidOpenTextDocument((doc) => {
-        const timestamp = new Date().toLocaleString(undefined, { timeZone });
-        const line = `[${timestamp}]: Opened ${doc.fileName}`;
+      vscode.workspace.onDidOpenTextDocument(doc => {
+        if (doc.uri.scheme !== 'file') {
+          return;
+        }
+        const ts = new Date().toLocaleString(undefined, { timeZone });
+        const relPath = vscode.workspace.workspaceFolders?.[0]
+          ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, doc.uri.fsPath)
+          : doc.fileName;
+        const line = `[${ts}]: Opened ${relPath}`;
         codingSummary += line + '\n';
         logMessage(line);
       })
     );
   }
 
-  // Track editing sessions
+  // Track editing sessions (only file:// URIs)
   context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument((doc) => metricsService.startSession(doc.uri)),
-    vscode.workspace.onDidCloseTextDocument((doc) => metricsService.endSession(doc.uri))
+    vscode.workspace.onDidOpenTextDocument(doc => {
+      if (doc.uri.scheme === 'file') {
+        metricsService.startSession(doc.uri);
+      }
+    }),
+    vscode.workspace.onDidCloseTextDocument(doc => {
+      if (doc.uri.scheme === 'file') {
+        metricsService.endSession(doc.uri);
+      }
+    })
   );
 
-  // Start periodic commits
+  // Start periodic commits and countdown
   createOrUpdateCommitTimer(commitInterval, localRepoPath, commitMessagePrefix, timeZone);
 
   // React to configuration changes
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((e) => {
+    vscode.workspace.onDidChangeConfiguration(e => {
       if (
         e.affectsConfiguration('codeTracking.commitInterval') ||
         e.affectsConfiguration('codeTracking.commitMessagePrefix') ||
         e.affectsConfiguration('codeTracking.trackFileOpens')
       ) {
-        const newCfg = vscode.workspace.getConfiguration('codeTracking');
-        const newInterval = newCfg.get<number>('commitInterval', 30);
-        const newPrefix = newCfg.get<string>('commitMessagePrefix', '');
-        const newTrack = newCfg.get<boolean>('trackFileOpens', false);
-        logMessage(`Settings updated → interval=${newInterval}, prefix="${newPrefix}", trackOpens=${newTrack}`);
-        createOrUpdateCommitTimer(newInterval, localRepoPath, newPrefix, timeZone);
-        if (newTrack !== trackFileOpens) {
+        const nc = vscode.workspace.getConfiguration('codeTracking');
+        const ni = nc.get<number>('commitInterval', 30);
+        const np = nc.get<string>('commitMessagePrefix', '');
+        const nt = nc.get<boolean>('trackFileOpens', false);
+        logMessage(`Settings updated → interval=${ni}, prefix="${np}", trackOpens=${nt}`);
+        createOrUpdateCommitTimer(ni, localRepoPath, np, timeZone);
+        if (nt !== trackFileOpens) {
           vscode.window.showInformationMessage('Reload to apply file-open tracking change.');
         }
       }
@@ -128,7 +147,63 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  logMessage(`Extension ready. Local repo at: ${localRepoPath}`);
+  // Show metrics command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeTracking.showMetrics', async () => {
+      const languageCounts = context.globalState.get<Record<string, number>>('languageCounts', {});
+      const sessionDurations = context.globalState.get<Record<string, number>>('sessionDurations', {});
+      const summaryDiff = await metricsService.computeDiffStats(localRepoPath);
+
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      let workspaceDiff = { added: 0, removed: 0 };
+      if (workspaceFolder) {
+        workspaceDiff = await metricsService.computeDiffStats(workspaceFolder);
+      }
+
+      const fmtDuration = (sec: number) => {
+        const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
+        return [h > 0 ? `${h}h` : null, m > 0 ? `${m}m` : null, s > 0 ? `${s}s` : null]
+          .filter(Boolean)
+          .join(' ') || '0s';
+      };
+
+      const friendlyName = (uriString: string) => {
+        try {
+          const uri = vscode.Uri.parse(uriString);
+          if (uri.scheme === 'file' && workspaceFolder) {
+            return path.relative(workspaceFolder, uri.fsPath);
+          }
+          return path.basename(uri.fsPath || uriString);
+        } catch {
+          return uriString;
+        }
+      };
+
+      const dedup = new Map<string, number>();
+      for (const [uri, secs] of Object.entries(sessionDurations)) {
+        const name = friendlyName(uri);
+        dedup.set(name, (dedup.get(name) || 0) + secs);
+      }
+
+      outputChannel.appendLine('=== 📊 Flaunt GitHub Metrics ===');
+      outputChannel.appendLine('• Language save counts:');
+      for (const [lang, count] of Object.entries(languageCounts)) {
+        outputChannel.appendLine(`    ${lang}: ${count}`);
+      }
+      outputChannel.appendLine('• Session durations:');
+      for (const [name, secs] of dedup) {
+        outputChannel.appendLine(`    ${name}: ${fmtDuration(secs)}`);
+      }
+      outputChannel.appendLine(`• Summary repo diff: +${summaryDiff.added}/−${summaryDiff.removed}`);
+      if (workspaceFolder) {
+        outputChannel.appendLine(`• Workspace diff: +${workspaceDiff.added}/−${workspaceDiff.removed}`);
+      }
+      outputChannel.appendLine('=== End Metrics ===\n');
+      outputChannel.show(true);
+    })
+  );
+
+  logMessage(`Extension ready. Local repo at ${localRepoPath}`);
 }
 
 export function deactivate() {
@@ -138,9 +213,6 @@ export function deactivate() {
   clearInterval(countdownTimer);
 }
 
-/**
- * Schedules periodic commits and status bar countdown.
- */
 function createOrUpdateCommitTimer(
   intervalMinutes: number,
   repoPath: string,
@@ -163,8 +235,7 @@ function createOrUpdateCommitTimer(
   }
   countdownTimer = setInterval(() => {
     const diff = Math.max(nextCommitTime - Date.now(), 0);
-    const m = Math.floor(diff / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
+    const m = Math.floor(diff / 60000), s = Math.floor((diff % 60000) / 1000);
     statusBarItem.text = `Next commit in ${m}m ${s}s`;
     if (diff <= 0) {
       nextCommitTime = Date.now() + ms;
@@ -172,9 +243,6 @@ function createOrUpdateCommitTimer(
   }, 1000);
 }
 
-/**
- * Performs a commit-and-push, always refreshing the OAuth token first.
- */
 async function commitAndPush(
   repoPath: string,
   prefix: string,
@@ -183,39 +251,32 @@ async function commitAndPush(
   if (!codingSummary) {
     return;
   }
-
   try {
-    // 1) Refresh session and reset remote URL
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
     const freshToken = session.accessToken;
     const freshOwner = session.account.label;
     const authRemote = `https://${freshOwner}:${freshToken}@github.com/${freshOwner}/${REPO_NAME}.git`;
     await git.remote(['set-url', 'origin', authRemote]);
-    logMessage('🔄 Refreshed origin remote with latest token');
+    logMessage('🔄 Refreshed origin remote');
 
-    // 2) Fetch & merge remote
     await git.fetch();
     logMessage('Fetched origin/main');
     await git.merge(['origin/main', '--strategy-option=theirs']);
     logMessage('Merged remote changes');
 
-    // 3) Append summary
     const summaryFile = path.join(repoPath, SUMMARY_FILENAME);
     fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
     await git.add(SUMMARY_FILENAME);
 
-    // 4) Commit with diff badge
     const badge = await metricsService.getDiffBadge(repoPath);
     const ts = new Date().toLocaleString(undefined, { timeZone });
-    const commitMessage = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
-    await git.commit(commitMessage);
-    logMessage(`Committed: "${commitMessage}"`);
+    const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
+    await git.commit(msg);
+    logMessage(`Committed: "${msg}"`);
 
-    // 5) Push using refreshed credentials
     await git.push('origin', 'main');
     logMessage('Pushed to origin/main successfully');
 
-    // 6) Milestone notification
     commitCount++;
     if (commitCount % 10 === 0) {
       vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
@@ -224,35 +285,27 @@ async function commitAndPush(
     vscode.window.showErrorMessage(`Error during commit/push: ${err.message}`);
     logMessage(`Error during commit/push: ${err.message}`);
   } finally {
-    // Reset in-memory summary
     codingSummary = '';
   }
 }
 
-/**
- * Ensures the GitHub repository exists.
- */
 async function ensureRepoExists(octokit: Octokit, owner: string, repo: string): Promise<boolean> {
   try {
     await octokit.repos.get({ owner, repo });
-    logMessage(`Repository "${repo}" exists for "${owner}".`);
+    logMessage(`Repo "${repo}" exists for "${owner}".`);
     return true;
   } catch (e: any) {
     if (e.status === 404) {
-      logMessage(`Creating repository "${repo}"...`);
+      logMessage(`Creating repo "${repo}"...`);
       await octokit.repos.createForAuthenticatedUser({ name: repo, private: true, auto_init: true });
-      logMessage(`Repository "${repo}" created.`);
+      logMessage(`Repo "${repo}" created.`);
       return true;
     }
-    vscode.window.showErrorMessage(`Error checking repository: ${e.message}`);
-    logMessage(`Error checking repository: ${e.message}`);
+    vscode.window.showErrorMessage(`Error checking repo: ${e.message}`);
     return false;
   }
 }
 
-/**
- * Clones the repository if needed, and sets the authenticated remote URL.
- */
 async function ensureLocalClone(
   localRepoPath: string,
   owner: string,
@@ -273,9 +326,6 @@ async function ensureLocalClone(
   logMessage('Authenticated remote URL set.');
 }
 
-/**
- * Logs messages to the FlauntGitHubLog output channel.
- */
 function logMessage(message: string) {
   if (!outputChannel) {
     outputChannel = vscode.window.createOutputChannel('FlauntGitHubLog');
