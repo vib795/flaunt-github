@@ -1,10 +1,10 @@
-# Flaunt GitHub v1.7.0
+# Flaunt GitHub v1.7.2
 
 **Flaunt GitHub** is a Visual Studio Code extension that logs your coding activity—file save events (and optional file opens, including Git‑provider previews)—and periodically commits a rolling summary to a private GitHub repository on a schedule.
 
 ---
 
-## 🆕 What’s New in v1.7.0
+## 🆕 What’s New in v1.7.2
 
 * **`.git` URI Tracking**
   Captures saves and opens for files viewed through VS Code’s Git provider (e.g. `package.json.git`), so every preview or diff counts.
@@ -65,7 +65,7 @@
 
 ## 🔧 Requirements
 
-* **VS Code** v1.70.0 or later
+* **VS Code** v1.105.1 or later
 * **Git** installed and in your system PATH
 * **GitHub Account** (authenticated via VS Code’s built‑in GitHub OAuth)
 
@@ -104,7 +104,7 @@ No GitHub token or username fields are needed—authentication is handled by VS�
 
 ## 📝 Changelog
 
-### v1.7.1
+### v1.7.2
 
 * Package updates - VSCode and Cursor
 
