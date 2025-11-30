@@ -1,15 +1,19 @@
-# Flaunt GitHub v1.7.2
+# Flaunt GitHub v2.0.0
 
-**Flaunt GitHub** is a Visual Studio Code extension that logs your coding activity—file save events (and optional file opens, including Git‑provider previews)—and periodically commits a rolling summary to a private GitHub repository on a schedule.
+**Flaunt GitHub** is a Visual Studio Code / Cursor extension that logs your coding activity—file save events **and** edit “snapshots”—and periodically commits a rolling summary to a private GitHub repository on a schedule.
 
 ---
 
-## 🆕 What’s New in v1.7.2
+## 🆕 What’s New in v2.0.0
 
-* **`.git` URI Tracking**
-  Captures saves and opens for files viewed through VS Code’s Git provider (e.g. `package.json.git`), so every preview or diff counts.
-* **Browser‑Based Authentication**
-  Fully relies on VS Code’s GitHub OAuth flow—no Personal Access Token required.
+- **Edit-Based Auto Snapshots**  
+  Even if you never hit <kbd>Ctrl+S</kbd>/<kbd>Cmd+S</kbd>, the extension tracks which files you edited during a commit interval, auto-saves them, and writes a summary entry.
+
+- **Autosave-Friendly**  
+  Works correctly with IDE autosave (e.g., “after 1 second”)—manual saves are no longer required to trigger commits.
+
+- **Stronger Metrics**  
+  Keeps tracking language usage and per-file session durations, and lets you view a quick metrics report via the **Show Code Tracking Metrics** command.
 
 ---
 
@@ -17,96 +21,181 @@
 
 ### Automatic Repository Management
 
-* On activation, checks for (or creates) a private `code-tracking` repo in your GitHub account and clones it locally.
+- On activation, the extension:
+  - Ensures a private `code-tracking` repo exists in your GitHub account.
+  - Clones it into the extension’s global storage directory.
+  - Configures the remote using your **GitHub username + Personal Access Token**.
 
 ### Activity Logging
 
-* **File Saves:** Logs each save event with a timestamp and workspace‑relative path—including `.git`‑based previews.
-* **Optional File Opens:** When `codeTracking.trackFileOpens` is enabled, logs file open events for real files.
+- **Manual Saves:**  
+  Every explicit save (`Ctrl+S` / `Cmd+S`) is logged with:
+  - Timestamp
+  - Workspace-relative path  
+  These entries are appended to `coding_summary.txt`.
+
+- **Auto Snapshots (Edits Only):**  
+  During each interval, the extension tracks which files were edited. If there were edits but no manual saves:
+  - It logs lines like:  
+    `"[timestamp]: Auto-snapshot src/extension.ts"`
+  - Auto-saves all open files before committing.
+
+- **Optional File Opens:**  
+  When `codeTracking.trackFileOpens` is enabled, logs file open events for real `file://` documents:
+  - `"[timestamp]: Opened src/metricsService.ts"`
 
 ### Periodic GitHub Commits
 
-* Appends accumulated logs to `coding_summary.txt`, commits with a timezone‑aware message, and pushes automatically at the configured interval.
-* **Configurable Interval:** Adjust `codeTracking.commitInterval` (in minutes); changes take effect immediately.
+- At the configured interval, the extension:
+  1. Fetches and merges `origin/main` using `--strategy-option=theirs` (to reduce conflicts across machines).
+  2. Appends the accumulated summary lines to `coding_summary.txt`.
+  3. Stages and commits with a timezone-aware message.
+  4. Pushes to `origin/main`.
+
+- **Configurable Interval:**  
+  `codeTracking.commitInterval` (in minutes) controls how often this happens. Changes take effect immediately.
 
 ### Status Bar Countdown
 
-* Shows a live timer to your next scheduled commit.
+- A status bar item shows a live countdown:  
+  `Next commit in Xm Ys`  
+  and resets after each interval.
 
 ### Manual Commit Trigger
 
-* Run **Start Code Tracking** from the Command Palette to push your summary instantly.
+- Run **Start Code Tracking** from the Command Palette to:
+  - Immediately create a summary commit (if there is activity).
+  - Push to `origin/main` on demand.
 
 ### Commit Message Prefix
 
-* Optionally prepend a custom prefix via `codeTracking.commitMessagePrefix` to group or identify commits.
+- Customize commit messages via:
+  - `codeTracking.commitMessagePrefix`  
+  Example:  
+  `"[FlauntGithub] (+12/−3) Coding activity summary - 11/30/2025, 12:07:44 PM"`
 
 ### Automatic Conflict Resolution
 
-* Before each push, merges remote changes using `--strategy-option=theirs` to avoid manual merge conflicts across machines.
+- Before each commit, the extension:
+  - `git fetch`
+  - `git merge origin/main --strategy-option=theirs`  
+  so the tracking repo stays in sync even if used on multiple machines.
 
 ### Milestone Notifications
 
-* Celebrates every 10 commits with an in‑editor notification to keep you motivated.
+- Every 10 summary commits, you get a small celebration toast in the editor.
 
 ### Metrics & Diff Badges
 
-* Run **Show Code Tracking Metrics** to see:
+- Run **Show Code Tracking Metrics** to see:
 
-  * Language‑specific save counts.
-  * Session durations per file (real files only).
-  * Uncommitted diff stats for both the tracking repo and your workspace.
+  - Language-specific save counts.
+  - Per-file session durations.
+  - Diff summary for the tracking repo (how much `coding_summary.txt` changed).
+  - Optional diff summary for your current workspace.
+
+- All displayed in the **FlauntGitHubLog** output channel.
 
 ### Output Channel Logging
 
-* All operations—repo creation, saves/opens, commits, pushes, errors—are logged in the **FlauntGitHubLog** panel, which opens automatically.
+- Everything is logged to **FlauntGitHubLog**:
+  - Repo creation / clone
+  - Auth / remote setup
+  - Saves, auto snapshots, opens
+  - Commits, pushes
+  - Errors and warnings
 
 ---
 
 ## 🔧 Requirements
 
-* **VS Code** v1.105.1 or later
-* **Git** installed and in your system PATH
-* **GitHub Account** (authenticated via VS Code’s built‑in GitHub OAuth)
+- **VS Code / Cursor**: v1.106.0 or later (matching the extension engine range)
+- **Git**: installed and available on your PATH
+- **GitHub Account**
+- **GitHub Personal Access Token (PAT)** with at least:
+  - `repo` scope (to create and push to `code-tracking`)
 
 ---
 
 ## ⚙️ Configuration
 
-Add or adjust these settings in your `settings.json` (user or workspace):
+Configure via **Settings** UI or directly in `settings.json`:
 
 ```jsonc
 {
+  // Required: GitHub username (e.g. "vib795")
+  "codeTracking.githubUsername": "your-github-username",
+
+  // Required: GitHub PAT with "repo" scope
+  "codeTracking.githubToken": "ghp_your_token_here",
+
   // Interval in minutes between automatic commits (default: 30)
   "codeTracking.commitInterval": 30,
 
   // Optional: prefix for commit messages
-  "codeTracking.commitMessagePrefix": "[Flaunt] ",
+  "codeTracking.commitMessagePrefix": "[FlauntGithub] ",
+
+  // Optional: timezone for timestamps in logs and commit messages
+  // Defaults to your system timezone if omitted
+  "codeTracking.timeZone": "America/Chicago",
 
   // Optional: track file open events (default: false)
-  "codeTracking.trackFileOpens": true
+  "codeTracking.trackFileOpens": false
 }
 ```
 
-No GitHub token or username fields are needed—authentication is handled by VS Code.
+> 💡 Authentication is handled via your **username + PAT**; no VS Code GitHub OAuth session is required.
 
 ---
 
 ## 📖 Usage
 
-1. **Auto‑start:** On VS Code launch, the extension activates, sets up the repo, and begins logging.
-2. **Save/Open Logging:** Tracks each save and (optionally) file open event, including `.git` previews.
-3. **Automatic Commits:** Happens at your configured interval—watch the status bar countdown.
-4. **Manual Commits:** Trigger **Start Code Tracking** via <kbd>Ctrl+Shift+P</kbd>.
-5. **View Metrics:** Run **Show Code Tracking Metrics** to open a detailed report in the log panel.
+1. **Install the Extension**
+
+   * Install the `.vsix` in VS Code / Cursor.
+   * Configure `codeTracking.githubUsername` and `codeTracking.githubToken`.
+
+2. **Activate / Auto-Start**
+
+   * On IDE launch or when a workspace opens, the extension:
+
+     * Verifies / creates the `code-tracking` repo.
+     * Clones / updates the local tracking repo.
+     * Starts the periodic commit timer.
+
+3. **Just Code Normally**
+
+   * With autosave enabled or disabled:
+
+     * Manual saves are logged as `Saved ...`
+     * Edits without saves are captured as `Auto-snapshot ...` at the next interval.
+
+4. **Automatic Commits & Pushes**
+
+   * At each interval:
+
+     * Edits are auto-snapshotted (if needed).
+     * Logs are appended to `coding_summary.txt`.
+     * A summary commit is created and pushed.
+
+5. **Manual Commit**
+
+   * Run **Start Code Tracking** from the Command Palette to force an immediate commit/push (if there is any activity).
+
+6. **View Metrics**
+
+   * Run **Show Code Tracking Metrics** to see language counts, session durations, and diff summaries in **FlauntGitHubLog**.
 
 ---
 
 ## 📝 Changelog
 
-### v1.7.2
+### v2.0.0
 
-* Package updates - VSCode and Cursor
+* Added **edit-based auto snapshots** so commits and pushes happen even when you never manually save (works great with autosave).
+* Added **auto-save before commit** whenever edits are detected but no manual save occurred in the interval.
+* Improved **metrics reporting** via the **Show Code Tracking Metrics** command.
+* Kept the private `code-tracking` repo model with automatic creation and push to `origin/main`.
 
 ---
 
