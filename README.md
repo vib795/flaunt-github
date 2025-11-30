@@ -104,17 +104,9 @@ No GitHub token or username fields are needed—authentication is handled by VS�
 
 ## 📝 Changelog
 
-### v1.7.0
+### v1.7.1
 
-* Added support for `.git` URI tracking in activity logs.
-* Fully switched to browser‑based GitHub OAuth; removed PAT requirements.
-* Updated docs and manifest to v1.7.0.
-
-### v1.6.0
-
-* Introduced VS Code GitHub OAuth sign‑in.
-* Dynamic commit interval and optional file‑open tracking without reload.
-* Added status bar countdown timer and commit prefix option.
+* Package updates - VSCode and Cursor
 
 ---
 
