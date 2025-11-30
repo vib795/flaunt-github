@@ -334,39 +334,87 @@ function createOrUpdateCommitTimer(
   }, 1000);
 }
 
+// async function commitAndPush(
+//   repoPath: string,
+//   prefix: string,
+//   timeZone: string
+// ) {
+//   if (!codingSummary) {
+//     logMessage('No coding summary recorded this interval; skipping commit/push.');
+//     return;
+//   }
+
+//   try {
+//     // Use whatever remote was set in ensureLocalClone (PAT-based)
+//     await git.fetch();
+//     logMessage('Fetched origin/main');
+//     await git.merge(['origin/main', '--strategy-option=theirs']);
+//     logMessage('Merged remote changes');
+
+//     const summaryFile = path.join(repoPath, SUMMARY_FILENAME);
+//     fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
+//     await git.add(SUMMARY_FILENAME);
+
+//     const badge = await metricsService.getDiffBadge(repoPath);
+//     const ts = new Date().toLocaleString(undefined, { timeZone });
+//     const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
+//     await git.commit(msg);
+//     logMessage(`Committed: "${msg}"`);
+
+//     await git.push('origin', 'main');
+//     logMessage('Pushed to origin/main successfully');
+
+//     commitCount++;
+//     if (commitCount % 10 === 0) {
+//       vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
+//     }
+//   } catch (err: any) {
+//     vscode.window.showErrorMessage(`Error during commit/push: ${err.message}`);
+//     logMessage(`Error during commit/push: ${err.message}`);
+//   } finally {
+//     codingSummary = '';
+//   }
+// }
+
 async function commitAndPush(
   repoPath: string,
   prefix: string,
   timeZone: string
 ) {
-  if (!codingSummary) {
-    logMessage('No coding summary recorded this interval; skipping commit/push.');
-    return;
-  }
-
   try {
-    // Use whatever remote was set in ensureLocalClone (PAT-based)
     await git.fetch();
     logMessage('Fetched origin/main');
     await git.merge(['origin/main', '--strategy-option=theirs']);
     logMessage('Merged remote changes');
 
     const summaryFile = path.join(repoPath, SUMMARY_FILENAME);
-    fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
-    await git.add(SUMMARY_FILENAME);
 
-    const badge = await metricsService.getDiffBadge(repoPath);
-    const ts = new Date().toLocaleString(undefined, { timeZone });
-    const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
-    await git.commit(msg);
-    logMessage(`Committed: "${msg}"`);
+    if (codingSummary) {
+      fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
+      await git.add(SUMMARY_FILENAME);
+      logMessage('Updated coding summary file and staged changes.');
+    } else {
+      logMessage('No coding summary recorded this interval; skipping summary file update.');
+    }
 
-    await git.push('origin', 'main');
-    logMessage('Pushed to origin/main successfully');
+    const diff = await git.diffSummary();
+    if (diff.files.length > 0) {
+      const badge = await metricsService.getDiffBadge(repoPath);
+      const ts = new Date().toLocaleString(undefined, { timeZone });
+      const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
+      await git.commit(msg);
+      logMessage(`Committed: "${msg}"`);
 
-    commitCount++;
-    if (commitCount % 10 === 0) {
-      vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
+      commitCount++;
+      if (commitCount % 10 === 0) {
+        vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
+      }
+
+      // 👉 Only push if we actually committed something
+      await git.push('origin', 'main');
+      logMessage('Pushed to origin/main successfully.');
+    } else {
+      logMessage('No repository changes to commit or push this interval.');
     }
   } catch (err: any) {
     vscode.window.showErrorMessage(`Error during commit/push: ${err.message}`);
@@ -375,6 +423,8 @@ async function commitAndPush(
     codingSummary = '';
   }
 }
+
+
 
 async function ensureRepoExists(
   octokit: Octokit,
