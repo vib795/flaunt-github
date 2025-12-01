@@ -21,6 +21,54 @@ let metricsService: MetricsService;
 let autoSaveInProgress = false;
 let changedFilesSinceLastCommit = new Set<string>();
 
+/**
+ * Get GitHub credentials, preferring:
+ * 1) VS Code Secret Storage (if already stored)
+ * 2) Settings (codeTracking.githubToken / codeTracking.githubUsername) as backup
+ * 3) VS Code GitHub auth provider (interactive login)
+ */
+async function getGitHubCredentials(
+  context: vscode.ExtensionContext
+): Promise<{ token: string; username: string }> {
+  // 1) Try secret storage
+  const storedToken = await context.secrets.get('codeTracking.githubToken');
+  const storedUser = await context.secrets.get('codeTracking.githubUsername');
+  if (storedToken && storedUser) {
+    return { token: storedToken, username: storedUser };
+  }
+
+  // 2) Try config as backup
+  const config = vscode.workspace.getConfiguration('codeTracking');
+  const cfgToken = config.get<string>('githubToken', '');
+  const cfgUser = config.get<string>('githubUsername', '');
+  if (cfgToken && cfgUser) {
+    // Cache into secrets so we stop depending on plain settings
+    await context.secrets.store('codeTracking.githubToken', cfgToken);
+    await context.secrets.store('codeTracking.githubUsername', cfgUser);
+    return { token: cfgToken, username: cfgUser };
+  }
+
+  // 3) Use VS Code GitHub auth (interactive)
+  const session = await vscode.authentication.getSession(
+    'github',
+    ['read:user', 'repo'],
+    { createIfNone: true }
+  );
+
+  const token = session.accessToken;
+  const label = session.account.label; // e.g. "vib795" or "vib795 (GitHub)"
+  const usernameFromLabel = label.split('(')[0].trim();
+
+  const octokit = new Octokit({ auth: token });
+  const user = await octokit.users.getAuthenticated();
+  const username = user.data.login || usernameFromLabel;
+
+  await context.secrets.store('codeTracking.githubToken', token);
+  await context.secrets.store('codeTracking.githubUsername', username);
+
+  return { token, username };
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   metricsService = new MetricsService(context);
 
@@ -43,10 +91,8 @@ export async function activate(context: vscode.ExtensionContext) {
     return;
   }
 
-  // Fetch configuration
+  // Fetch configuration (non-auth settings)
   const config = vscode.workspace.getConfiguration('codeTracking');
-  const githubToken = config.get<string>('githubToken', '');
-  const githubUsername = config.get<string>('githubUsername', '');
   const commitInterval = config.get<number>('commitInterval', 30);
   const commitMessagePrefix = config.get<string>('commitMessagePrefix', '');
   const timeZone = config.get<string>(
@@ -55,23 +101,29 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   const trackFileOpens = config.get<boolean>('trackFileOpens', false);
 
-  // Validate GitHub configuration
-  if (!githubToken || !githubUsername) {
+  // Get GitHub credentials (secrets -> settings -> auth provider)
+  let githubToken: string;
+  let githubUsername: string;
+  try {
+    const creds = await getGitHubCredentials(context);
+    githubToken = creds.token;
+    githubUsername = creds.username;
+  } catch (e: any) {
     vscode.window.showErrorMessage(
-      'Please configure your GitHub token and username in the settings (codeTracking.githubToken, codeTracking.githubUsername).'
+      'GitHub sign-in failed or was cancelled. Flaunt GitHub requires GitHub access to work.'
     );
-    logMessage('Missing GitHub token or username in configuration.');
+    logMessage(`Authentication error: ${e?.message ?? String(e)}`);
     return;
   }
 
-  // Authenticate with GitHub
+  // Authenticate with GitHub (sanity check)
   let octokit: Octokit;
   try {
     octokit = new Octokit({ auth: githubToken });
     const user = await octokit.users.getAuthenticated();
     logMessage(`Authenticated as ${user.data.login}`);
   } catch (e: any) {
-    vscode.window.showErrorMessage('GitHub sign-in failed. Please check your token.');
+    vscode.window.showErrorMessage('GitHub sign-in failed. Please check your credentials.');
     logMessage(`Authentication error: ${e.message}`);
     return;
   }
@@ -90,22 +142,30 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Track file saves (only file:// URIs)
   context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument(e => {
-      const doc = e.document;
+    vscode.workspace.onDidSaveTextDocument(doc => {
       if (doc.uri.scheme !== 'file') {
         return;
       }
-      const wsFolder = vscode.workspace.workspaceFolders?.[0];
-      const relPath = wsFolder
-        ? path.relative(wsFolder.uri.fsPath, doc.uri.fsPath)
-        : doc.fileName;
-  
-      changedFilesSinceLastCommit.add(relPath);
-      // logMessage(`Edit detected in ${relPath}`);
-    })
-  );  
+      // mark that there was at least one save in this commit interval
+      saveDetectedSinceLastCommit = true;
 
-  // Track edits (even if autosave hides dirty state / save events)
+      // If this save is part of our auto-save cycle, we already logged it
+      if (autoSaveInProgress) {
+        return;
+      }
+
+      const ts = new Date().toLocaleString(undefined, { timeZone });
+      const relPath = vscode.workspace.workspaceFolders?.[0]
+        ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, doc.uri.fsPath)
+        : doc.fileName;
+      const line = `[${ts}]: Saved ${relPath}`;
+      codingSummary += line + '\n';
+      logMessage(line);
+      metricsService.trackLanguage(doc);
+    })
+  );
+
+  // Track edits (even with autosave)
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(e => {
       const doc = e.document;
@@ -116,7 +176,10 @@ export async function activate(context: vscode.ExtensionContext) {
       const relPath = wsFolder
         ? path.relative(wsFolder.uri.fsPath, doc.uri.fsPath)
         : doc.fileName;
+
       changedFilesSinceLastCommit.add(relPath);
+      // Debug log (optional):
+      // logMessage(`Edit detected in ${relPath}`);
     })
   );
 
@@ -176,7 +239,12 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         const newTrackFileOpens = newConfig.get<boolean>('trackFileOpens', trackFileOpens);
 
-        createOrUpdateCommitTimer(newCommitInterval, localRepoPath, newCommitPrefix, newTimeZone);
+        createOrUpdateCommitTimer(
+          newCommitInterval,
+          localRepoPath,
+          newCommitPrefix,
+          newTimeZone
+        );
 
         if (newTrackFileOpens !== trackFileOpens) {
           vscode.window.showInformationMessage('Reload to apply file-open tracking change.');
@@ -235,9 +303,13 @@ export async function activate(context: vscode.ExtensionContext) {
       for (const [name, secs] of dedup) {
         outputChannel.appendLine(`    ${name}: ${fmtDuration(secs)}`);
       }
-      outputChannel.appendLine(`• Summary repo diff: +${summaryDiff.added}/−${summaryDiff.removed}`);
+      outputChannel.appendLine(
+        `• Summary repo diff: +${summaryDiff.added}/−${summaryDiff.removed}`
+      );
       if (wsFolder) {
-        outputChannel.appendLine(`• Workspace diff: +${workspaceDiff.added}/−${workspaceDiff.removed}`);
+        outputChannel.appendLine(
+          `• Workspace diff: +${workspaceDiff.added}/−${workspaceDiff.removed}`
+        );
       }
       outputChannel.appendLine(`• Summary file: ${summaryFile}`);
       outputChannel.appendLine('=== End Metrics ===\n');
@@ -307,7 +379,7 @@ function createOrUpdateCommitTimer(
         logMessage('No manual save and no edits this interval; nothing to auto-save.');
       }
 
-      // Now behave as before: commit only if codingSummary has content
+      // Commit & push logic (will only commit if there are changes)
       await commitAndPush(repoPath, prefix, timeZone);
     } catch (err: any) {
       logMessage(`Commit timer error: ${err?.message ?? String(err)}`);
@@ -333,48 +405,6 @@ function createOrUpdateCommitTimer(
     }
   }, 1000);
 }
-
-// async function commitAndPush(
-//   repoPath: string,
-//   prefix: string,
-//   timeZone: string
-// ) {
-//   if (!codingSummary) {
-//     logMessage('No coding summary recorded this interval; skipping commit/push.');
-//     return;
-//   }
-
-//   try {
-//     // Use whatever remote was set in ensureLocalClone (PAT-based)
-//     await git.fetch();
-//     logMessage('Fetched origin/main');
-//     await git.merge(['origin/main', '--strategy-option=theirs']);
-//     logMessage('Merged remote changes');
-
-//     const summaryFile = path.join(repoPath, SUMMARY_FILENAME);
-//     fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
-//     await git.add(SUMMARY_FILENAME);
-
-//     const badge = await metricsService.getDiffBadge(repoPath);
-//     const ts = new Date().toLocaleString(undefined, { timeZone });
-//     const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
-//     await git.commit(msg);
-//     logMessage(`Committed: "${msg}"`);
-
-//     await git.push('origin', 'main');
-//     logMessage('Pushed to origin/main successfully');
-
-//     commitCount++;
-//     if (commitCount % 10 === 0) {
-//       vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
-//     }
-//   } catch (err: any) {
-//     vscode.window.showErrorMessage(`Error during commit/push: ${err.message}`);
-//     logMessage(`Error during commit/push: ${err.message}`);
-//   } finally {
-//     codingSummary = '';
-//   }
-// }
 
 async function commitAndPush(
   repoPath: string,
@@ -410,7 +440,6 @@ async function commitAndPush(
         vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
       }
 
-      // 👉 Only push if we actually committed something
       await git.push('origin', 'main');
       logMessage('Pushed to origin/main successfully.');
     } else {
@@ -423,8 +452,6 @@ async function commitAndPush(
     codingSummary = '';
   }
 }
-
-
 
 async function ensureRepoExists(
   octokit: Octokit,
@@ -458,17 +485,18 @@ async function ensureLocalClone(
   token: string
 ): Promise<void> {
   const authRemote = `https://${owner}:${token}@github.com/${owner}/${repo}.git`;
+  const safeRemote = `https://github.com/${owner}/${repo}.git`;
 
   if (!fs.existsSync(localRepoPath)) {
     fs.mkdirSync(localRepoPath, { recursive: true });
-    logMessage(`Cloning ${authRemote} into ${localRepoPath}...`);
+    logMessage(`Cloning ${safeRemote} into ${localRepoPath}...`);
     await simpleGit().clone(authRemote, localRepoPath);
     logMessage('Clone successful.');
   }
 
   git = simpleGit(localRepoPath);
   await git.remote(['set-url', 'origin', authRemote]);
-  logMessage('Authenticated remote URL set.');
+  logMessage(`Authenticated remote URL set to ${safeRemote}.`);
 }
 
 function fmtDuration(totalSeconds: number): string {

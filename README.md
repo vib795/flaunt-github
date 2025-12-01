@@ -1,4 +1,4 @@
-# Flaunt GitHub v2.0.1
+# Flaunt GitHub v2.1.0
 
 **Flaunt GitHub** is a Visual Studio Code / Cursor extension that logs your coding activity—file save events and edit “snapshots”—and periodically commits a rolling summary to a private GitHub repository on a schedule.
 
@@ -6,16 +6,25 @@ If you keep autosave on and never press <kbd>Ctrl+S</kbd>/<kbd>Cmd+S</kbd>, it s
 
 ---
 
-## 🆕 What’s New in v2.0.x
+## 🆕 What’s New in v2.x
+
+### v2.1.0
+
+- Switched to **VS Code’s GitHub authentication** as the primary auth mechanism:
+  - Prompts you to sign in with GitHub via VS Code’s built-in auth provider.
+  - Stores the token and username securely in **Secret Storage**, not in plain settings.
+- Keeps **backup support** for `codeTracking.githubToken` and `codeTracking.githubUsername` in `settings.json`, which are imported into Secret Storage if present.
+- Keeps all v2.0.x improvements:
+  - Autosave-friendly tracking.
+  - Edit-based auto snapshots.
+  - Clean commit & push behavior.
 
 ### v2.0.1
 
 - Commit/push behavior refined:
   - Only creates a commit when there are actual changes in the tracking repo.
   - Only pushes when a commit was created (no more “push” calls when nothing changed).
-- Internal safety/cleanup:
-  - Avoids unnecessary remote pushes when the repo is already up to date.
-  - Minor logging and robustness improvements.
+- Minor logging and internal cleanup.
 
 ### v2.0.0
 
@@ -35,7 +44,27 @@ If you keep autosave on and never press <kbd>Ctrl+S</kbd>/<kbd>Cmd+S</kbd>, it s
 - On activation, the extension:
   - Ensures a private `code-tracking` repository exists in your GitHub account.
   - Clones it into the extension’s global storage directory.
-  - Configures the remote using your **GitHub username + Personal Access Token (PAT)**.
+  - Configures the remote using your GitHub credentials (via VS Code auth or PAT).
+
+### Smart Authentication
+
+Flaunt GitHub resolves your GitHub credentials in this order:
+
+1. **VS Code Secret Storage**  
+   - If a token and username were stored previously, it uses those directly.
+
+2. **Backup: Settings (`settings.json`)**  
+   - If `codeTracking.githubToken` and `codeTracking.githubUsername` are set, they are used and then cached in Secret Storage.
+
+3. **VS Code GitHub Auth Provider (auto-login)**  
+   - If nothing is available, it calls:
+     ```ts
+     vscode.authentication.getSession('github', ['read:user', 'repo'], { createIfNone: true })
+     ```
+   - VS Code shows the standard “Sign in with GitHub” UX.
+   - The token and username are then stored securely for next time.
+
+You don’t *have* to create a PAT manually unless you prefer that workflow.
 
 ### Activity Logging
 
@@ -44,7 +73,7 @@ If you keep autosave on and never press <kbd>Ctrl+S</kbd>/<kbd>Cmd+S</kbd>, it s
 
   ```text
   [timestamp]: Saved path/to/file.ts
-  ```
+````
 
 and appended to `coding_summary.txt`.
 
@@ -57,7 +86,7 @@ and appended to `coding_summary.txt`.
     ```text
     [timestamp]: Auto-snapshot src/extension.ts
     ```
-  * Auto-saves all open files before committing, so what you see on GitHub matches the editor.
+  * Auto-saves all open files before committing, so what you see on GitHub matches your editor.
 
 * **Optional File Opens**
   When `codeTracking.trackFileOpens` is enabled, the extension also logs file open events for real `file://` documents:
@@ -84,7 +113,7 @@ On each interval:
 
    * Pushes to `origin/main`.
 
-If there are **no changes at all** in the tracking repo for that interval:
+If there are **no changes** in the tracking repo for that interval:
 
 * No commit is created.
 * No push is attempted.
@@ -153,25 +182,19 @@ If there are **no changes at all** in the tracking repo for that interval:
 
 * **VS Code / Cursor**: v1.106.0 or later (matching the extension’s `engines.vscode` range).
 * **Git**: Installed and available on your system `PATH`.
-* **GitHub Account**
-* **GitHub Personal Access Token** with at least:
-
-  * `repo` scope (to create & push to `code-tracking`).
+* **GitHub Account** with permission to create and push to a private repo.
+* Network access to `github.com`.
 
 ---
 
 ## ⚙️ Configuration
 
-Configure via **Settings** UI or directly in `settings.json`:
+You can configure the extension via **Settings** UI or directly in `settings.json`.
+
+### Core Settings
 
 ```jsonc
 {
-  // Required: GitHub username (e.g., "vib795")
-  "codeTracking.githubUsername": "your-github-username",
-
-  // Required: GitHub PAT with "repo" scope
-  "codeTracking.githubToken": "ghp_your_token_here",
-
   // Interval in minutes between automatic commits (default: 30)
   "codeTracking.commitInterval": 30,
 
@@ -187,7 +210,23 @@ Configure via **Settings** UI or directly in `settings.json`:
 }
 ```
 
-> 🔐 **Security tip:** Avoid logging your PAT in any output. The extension should never log the full authenticated remote URL.
+### Backup Auth Settings (Optional)
+
+These are **optional** and only used as a fallback if Secret Storage is empty and no GitHub auth session exists:
+
+```jsonc
+{
+  // Optional: GitHub username (e.g., "vib795")
+  "codeTracking.githubUsername": "your-github-username",
+
+  // Optional: GitHub PAT with "repo" scope
+  "codeTracking.githubToken": "ghp_your_token_here"
+}
+```
+
+> 🔐 **Security tip:**
+> Prefer using VS Code’s GitHub sign-in flow and let the extension use Secret Storage.
+> Use `codeTracking.githubToken` only if you can’t use the built-in GitHub auth for some reason.
 
 ---
 
@@ -196,13 +235,14 @@ Configure via **Settings** UI or directly in `settings.json`:
 1. **Install the Extension**
 
    * Install the `.vsix` in VS Code / Cursor.
-   * Configure `codeTracking.githubUsername` and `codeTracking.githubToken`.
 
-2. **Activation & Repo Setup**
+2. **First Activation**
 
-   * When a workspace is opened:
+   * When a workspace is opened, the extension:
 
-     * The extension authenticates to GitHub using your PAT.
+     * Tries to read credentials from Secret Storage.
+     * If none are present, checks backup settings (`codeTracking.githubToken` / `codeTracking.githubUsername`).
+     * If still none, prompts you to **sign in with GitHub** using VS Code’s GitHub auth provider.
      * Ensures your private `code-tracking` repo exists (creates it if needed).
      * Clones or updates the local tracking repo and sets the authenticated remote.
 
@@ -222,7 +262,7 @@ Configure via **Settings** UI or directly in `settings.json`:
        * A commit is created and pushed to `origin/main`.
      * If nothing changed:
 
-       * No commit, no push, no noise.
+       * No commit, no push.
 
 5. **Manual Commit**
 
@@ -240,6 +280,12 @@ Configure via **Settings** UI or directly in `settings.json`:
 ---
 
 ## 📝 Changelog
+
+### v2.1.0
+
+* Switched to VS Code GitHub auth as the primary way to obtain credentials.
+* Added Secret Storage support and kept PAT-based settings as a backup path.
+* Consolidated v2.0.x improvements into a smoother onboarding and auth experience.
 
 ### v2.0.1
 
