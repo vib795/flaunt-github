@@ -14,84 +14,88 @@ let outputChannel: vscode.OutputChannel;
 let commitTimer: NodeJS.Timeout;
 let countdownTimer: NodeJS.Timeout;
 let statusBarItem: vscode.StatusBarItem;
+let metricsService: MetricsService;
+
 let saveDetectedSinceLastCommit = false;
+let autoSaveInProgress = false;
 let nextCommitTime = 0;
 let commitCount = 0;
-let metricsService: MetricsService;
-let autoSaveInProgress = false;
-let changedFilesSinceLastCommit = new Set<string>();
 
 /**
- * Get GitHub credentials, preferring:
- * 1) VS Code Secret Storage (if already stored)
- * 2) Settings (codeTracking.githubToken / codeTracking.githubUsername) as backup
- * 3) VS Code GitHub auth provider (interactive login)
+ * Resolve GitHub credentials in this order:
+ * 1) Secret storage
+ * 2) Settings (codeTracking.githubToken / codeTracking.githubUsername)
+ * 3) VS Code GitHub auth provider
  */
 async function getGitHubCredentials(
   context: vscode.ExtensionContext
 ): Promise<{ token: string; username: string }> {
-  // 1) Try secret storage
-  const storedToken = await context.secrets.get('codeTracking.githubToken');
-  const storedUser = await context.secrets.get('codeTracking.githubUsername');
-  if (storedToken && storedUser) {
-    return { token: storedToken, username: storedUser };
+  const secrets = context.secrets;
+  let token = await secrets.get('codeTracking.githubToken');
+  let username = await secrets.get('codeTracking.githubUsername');
+
+  const config = vscode.workspace.getConfiguration('codeTracking');
+
+  // 1) Secret storage
+  if (token && username) {
+    return { token, username };
   }
 
-  // 2) Try config as backup
-  const config = vscode.workspace.getConfiguration('codeTracking');
+  // 2) Settings fallback
   const cfgToken = config.get<string>('githubToken', '');
   const cfgUser = config.get<string>('githubUsername', '');
   if (cfgToken && cfgUser) {
-    // Cache into secrets so we stop depending on plain settings
-    await context.secrets.store('codeTracking.githubToken', cfgToken);
-    await context.secrets.store('codeTracking.githubUsername', cfgUser);
+    await secrets.store('codeTracking.githubToken', cfgToken);
+    await secrets.store('codeTracking.githubUsername', cfgUser);
     return { token: cfgToken, username: cfgUser };
   }
 
-  // 3) Use VS Code GitHub auth (interactive)
+  // 3) VS Code GitHub auth provider
   const session = await vscode.authentication.getSession(
     'github',
     ['read:user', 'repo'],
     { createIfNone: true }
   );
+  const accessToken = session.accessToken;
 
-  const token = session.accessToken;
-  const label = session.account.label; // e.g. "vib795" or "vib795 (GitHub)"
-  const usernameFromLabel = label.split('(')[0].trim();
-
-  const octokit = new Octokit({ auth: token });
+  const octokit = new Octokit({ auth: accessToken });
   const user = await octokit.users.getAuthenticated();
-  const username = user.data.login || usernameFromLabel;
+  const login = user.data.login;
 
-  await context.secrets.store('codeTracking.githubToken', token);
-  await context.secrets.store('codeTracking.githubUsername', username);
+  await secrets.store('codeTracking.githubToken', accessToken);
+  await secrets.store('codeTracking.githubUsername', login);
 
-  return { token, username };
+  return { token: accessToken, username: login };
 }
 
 export async function activate(context: vscode.ExtensionContext) {
   metricsService = new MetricsService(context);
 
-  // Create and show output channel
+  // Output channel
   outputChannel = vscode.window.createOutputChannel('FlauntGitHubLog');
   outputChannel.show(true);
   logMessage('Flaunt GitHub: Extension Activated!');
 
-  // Create status bar item for countdown
-  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  // Status bar countdown
+  statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100
+  );
   statusBarItem.text = 'Flaunt GitHub: Initializing...';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
-  // Ensure workspace is open
+  // Require a workspace
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage('Please open a workspace folder to use Flaunt GitHub.');
+    vscode.window.showErrorMessage(
+      'Please open a workspace folder to use Flaunt GitHub.'
+    );
     logMessage('No workspace folder open. Cannot initialize extension.');
     return;
   }
 
-  // Fetch configuration (non-auth settings)
+  // Config (non-auth)
   const config = vscode.workspace.getConfiguration('codeTracking');
   const commitInterval = config.get<number>('commitInterval', 30);
   const commitMessagePrefix = config.get<string>('commitMessagePrefix', '');
@@ -101,34 +105,35 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   const trackFileOpens = config.get<boolean>('trackFileOpens', false);
 
-  // Get GitHub credentials (secrets -> settings -> auth provider)
+  // Resolve GitHub credentials
   let githubToken: string;
   let githubUsername: string;
   try {
-    const creds = await getGitHubCredentials(context);
-    githubToken = creds.token;
-    githubUsername = creds.username;
+    ({ token: githubToken, username: githubUsername } =
+      await getGitHubCredentials(context));
   } catch (e: any) {
     vscode.window.showErrorMessage(
-      'GitHub sign-in failed or was cancelled. Flaunt GitHub requires GitHub access to work.'
+      'GitHub sign-in failed. Flaunt GitHub needs GitHub access to work.'
     );
-    logMessage(`Authentication error: ${e?.message ?? String(e)}`);
+    logMessage(`Authentication error resolving credentials: ${e?.message ?? e}`);
     return;
   }
 
-  // Authenticate with GitHub (sanity check)
+  // Sanity auth check
   let octokit: Octokit;
   try {
     octokit = new Octokit({ auth: githubToken });
     const user = await octokit.users.getAuthenticated();
     logMessage(`Authenticated as ${user.data.login}`);
   } catch (e: any) {
-    vscode.window.showErrorMessage('GitHub sign-in failed. Please check your credentials.');
+    vscode.window.showErrorMessage(
+      'GitHub sign-in failed. Please check your credentials.'
+    );
     logMessage(`Authentication error: ${e.message}`);
     return;
   }
 
-  // Ensure remote repo exists (create if missing)
+  // Ensure remote repo exists
   const repoOk = await ensureRepoExists(octokit, githubUsername, REPO_NAME);
   if (!repoOk) {
     logMessage('Remote repo not available; aborting initialization.');
@@ -140,23 +145,27 @@ export async function activate(context: vscode.ExtensionContext) {
   await ensureLocalClone(localRepoPath, githubUsername, REPO_NAME, githubToken);
   git = simpleGit(localRepoPath);
 
-  // Track file saves (only file:// URIs)
+  // Track manual saves (file:// only)
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(doc => {
       if (doc.uri.scheme !== 'file') {
         return;
       }
-      // mark that there was at least one save in this commit interval
-      saveDetectedSinceLastCommit = true;
 
-      // If this save is part of our auto-save cycle, we already logged it
+      // Ignore saves triggered by our own auto-save cycle
       if (autoSaveInProgress) {
         return;
       }
 
+      // Mark that we saw at least one save this interval
+      saveDetectedSinceLastCommit = true;
+
       const ts = new Date().toLocaleString(undefined, { timeZone });
       const relPath = vscode.workspace.workspaceFolders?.[0]
-        ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, doc.uri.fsPath)
+        ? path.relative(
+            vscode.workspace.workspaceFolders[0].uri.fsPath,
+            doc.uri.fsPath
+          )
         : doc.fileName;
       const line = `[${ts}]: Saved ${relPath}`;
       codingSummary += line + '\n';
@@ -165,25 +174,7 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // Track edits (even with autosave)
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument(e => {
-      const doc = e.document;
-      if (doc.uri.scheme !== 'file') {
-        return;
-      }
-      const wsFolder = vscode.workspace.workspaceFolders?.[0];
-      const relPath = wsFolder
-        ? path.relative(wsFolder.uri.fsPath, doc.uri.fsPath)
-        : doc.fileName;
-
-      changedFilesSinceLastCommit.add(relPath);
-      // Debug log (optional):
-      // logMessage(`Edit detected in ${relPath}`);
-    })
-  );
-
-  // Optionally track file opens (only file:// URIs)
+  // Optional: track file opens
   if (trackFileOpens) {
     context.subscriptions.push(
       vscode.workspace.onDidOpenTextDocument(doc => {
@@ -192,7 +183,10 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         const ts = new Date().toLocaleString(undefined, { timeZone });
         const relPath = vscode.workspace.workspaceFolders?.[0]
-          ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, doc.uri.fsPath)
+          ? path.relative(
+              vscode.workspace.workspaceFolders[0].uri.fsPath,
+              doc.uri.fsPath
+            )
           : doc.fileName;
         const line = `[${ts}]: Opened ${relPath}`;
         codingSummary += line + '\n';
@@ -201,7 +195,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  // Track editing sessions (only file:// URIs)
+  // Session tracking
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument(doc => {
       if (doc.uri.scheme === 'file') {
@@ -215,10 +209,15 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // Start periodic commits and countdown
-  createOrUpdateCommitTimer(commitInterval, localRepoPath, commitMessagePrefix, timeZone);
+  // Start periodic commits
+  createOrUpdateCommitTimer(
+    commitInterval,
+    localRepoPath,
+    commitMessagePrefix,
+    timeZone
+  );
 
-  // React to configuration changes
+  // React to config changes
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
@@ -227,41 +226,38 @@ export async function activate(context: vscode.ExtensionContext) {
         e.affectsConfiguration('codeTracking.timeZone') ||
         e.affectsConfiguration('codeTracking.trackFileOpens')
       ) {
-        const newConfig = vscode.workspace.getConfiguration('codeTracking');
-        const newCommitInterval = newConfig.get<number>('commitInterval', commitInterval);
-        const newCommitPrefix = newConfig.get<string>(
-          'commitMessagePrefix',
-          commitMessagePrefix
-        );
-        const newTimeZone = newConfig.get<string>(
+        const nc = vscode.workspace.getConfiguration('codeTracking');
+        const ni = nc.get<number>('commitInterval', commitInterval);
+        const np = nc.get<string>('commitMessagePrefix', commitMessagePrefix);
+        const ntz = nc.get<string>(
           'timeZone',
           Intl.DateTimeFormat().resolvedOptions().timeZone
         );
-        const newTrackFileOpens = newConfig.get<boolean>('trackFileOpens', trackFileOpens);
+        const ntf = nc.get<boolean>('trackFileOpens', trackFileOpens);
 
-        createOrUpdateCommitTimer(
-          newCommitInterval,
-          localRepoPath,
-          newCommitPrefix,
-          newTimeZone
+        logMessage(
+          `Settings updated → interval=${ni}, prefix="${np}", trackOpens=${ntf}, timeZone=${ntz}`
         );
+        createOrUpdateCommitTimer(ni, localRepoPath, np, ntz);
 
-        if (newTrackFileOpens !== trackFileOpens) {
-          vscode.window.showInformationMessage('Reload to apply file-open tracking change.');
+        if (ntf !== trackFileOpens) {
+          vscode.window.showInformationMessage(
+            'Reload VS Code to apply file-open tracking changes.'
+          );
         }
       }
     })
   );
 
-  // Manual commit command
+  // Manual commit
   context.subscriptions.push(
     vscode.commands.registerCommand('codeTracking.start', async () => {
       await commitAndPush(localRepoPath, commitMessagePrefix, timeZone);
-      vscode.window.showInformationMessage('Manual commit executed.');
+      vscode.window.showInformationMessage('Flaunt GitHub: Manual commit executed.');
     })
   );
 
-  // Show metrics command
+  // Metrics command
   context.subscriptions.push(
     vscode.commands.registerCommand('codeTracking.showMetrics', async () => {
       const languageCounts = metricsService.getLanguageCounts();
@@ -327,6 +323,12 @@ export function deactivate() {
   clearInterval(countdownTimer);
 }
 
+/**
+ * At each tick:
+ *  - If no manual saves, look for dirty docs and auto-snapshot them.
+ *  - If codingSummary is still empty, fall back to checking workspace Git diff.
+ *  - Then call commitAndPush (which only acts when codingSummary is non-empty).
+ */
 function createOrUpdateCommitTimer(
   intervalMinutes: number,
   repoPath: string,
@@ -337,56 +339,60 @@ function createOrUpdateCommitTimer(
     clearInterval(commitTimer);
     logMessage('Cleared previous commit timer.');
   }
+
   const ms = intervalMinutes * 60_000;
   nextCommitTime = Date.now() + ms;
 
   commitTimer = setInterval(async () => {
     try {
-      if (!saveDetectedSinceLastCommit && changedFilesSinceLastCommit.size > 0) {
-        logMessage(
-          'No manual save detected, but edits were made this interval; auto-saving before commit.'
+      // 1) If no manual save, look for dirty in-memory docs and auto-snapshot them
+      if (!saveDetectedSinceLastCommit) {
+        const dirtyDocs = vscode.workspace.textDocuments.filter(
+          d => d.isDirty && d.uri.scheme === 'file'
         );
 
-        const ts = new Date().toLocaleString(undefined, { timeZone });
-        const wsFolder = vscode.workspace.workspaceFolders?.[0];
+        if (dirtyDocs.length > 0) {
+          logMessage(
+            `No manual save detected, but ${dirtyDocs.length} dirty file(s) found; auto-saving before commit.`
+          );
 
-        // Log edited files into the summary as an "auto-snapshot"
-        for (const relPath of changedFilesSinceLastCommit) {
-          const line = `[${ts}]: Auto-snapshot ${relPath}`;
-          codingSummary += line + '\n';
-          logMessage(line);
+          const ts = new Date().toLocaleString(undefined, { timeZone });
+          const wsFolder = vscode.workspace.workspaceFolders?.[0];
 
-          if (wsFolder) {
-            const doc = vscode.workspace.textDocuments.find(
-              d =>
-                d.uri.scheme === 'file' &&
-                path.relative(wsFolder.uri.fsPath, d.uri.fsPath) === relPath
-            );
-            if (doc) {
-              metricsService.trackLanguage(doc);
-            }
+          for (const doc of dirtyDocs) {
+            const relPath = wsFolder
+              ? path.relative(wsFolder.uri.fsPath, doc.uri.fsPath)
+              : doc.fileName;
+            const line = `[${ts}]: Auto-snapshot ${relPath}`;
+            codingSummary += line + '\n';
+            logMessage(line);
+            metricsService.trackLanguage(doc);
           }
-        }
 
-        // Perform auto-save; onDidSave will fire, but we suppress extra logging there
-        autoSaveInProgress = true;
-        try {
-          await vscode.workspace.saveAll(false);
-        } finally {
-          autoSaveInProgress = false;
+          autoSaveInProgress = true;
+          try {
+            await vscode.workspace.saveAll(false);
+          } finally {
+            autoSaveInProgress = false;
+          }
+        } else {
+          logMessage(
+            'No manual save and no dirty files this interval; nothing to auto-save.'
+          );
         }
-      } else if (!saveDetectedSinceLastCommit && changedFilesSinceLastCommit.size === 0) {
-        logMessage('No manual save and no edits this interval; nothing to auto-save.');
       }
 
-      // Commit & push logic (will only commit if there are changes)
+      // 2) If we still have no summary lines, check workspace Git diff as a fallback
+      if (!codingSummary) {
+        await snapshotWorkspaceDiff(timeZone);
+      }
+
+      // 3) Commit and push if we recorded anything
       await commitAndPush(repoPath, prefix, timeZone);
     } catch (err: any) {
       logMessage(`Commit timer error: ${err?.message ?? String(err)}`);
     } finally {
-      // reset flags for the next interval
       saveDetectedSinceLastCommit = false;
-      changedFilesSinceLastCommit.clear();
     }
   }, ms);
 
@@ -397,8 +403,8 @@ function createOrUpdateCommitTimer(
   }
   countdownTimer = setInterval(() => {
     const diff = Math.max(nextCommitTime - Date.now(), 0);
-    const m = Math.floor(diff / 60000),
-      s = Math.floor((diff % 60000) / 1000);
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
     statusBarItem.text = `Next commit in ${m}m ${s}s`;
     if (diff <= 0) {
       nextCommitTime = Date.now() + ms;
@@ -406,11 +412,50 @@ function createOrUpdateCommitTimer(
   }, 1000);
 }
 
+/**
+ * Fallback: if we didn't see saves or dirty docs, but the workspace Git
+ * diff has changes (M files, etc.), we still log something so that the
+ * interval produces a commit.
+ */
+async function snapshotWorkspaceDiff(timeZone: string) {
+  const wsFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!wsFolder) return;
+
+  try {
+    const gitRoot = wsFolder.uri.fsPath;
+    const wsGit = simpleGit(gitRoot);
+    const diff = await wsGit.diffSummary();
+
+    const added = diff.insertions || 0;
+    const removed = diff.deletions || 0;
+
+    if (added === 0 && removed === 0 && diff.files.length === 0) {
+      logMessage('Workspace diff clean; no fallback snapshot needed.');
+      return;
+    }
+
+    const ts = new Date().toLocaleString(undefined, { timeZone });
+    const line = `[${ts}]: Workspace diff snapshot (+${added}/−${removed})`;
+    codingSummary += line + '\n';
+    logMessage(line);
+  } catch (err: any) {
+    logMessage(`Error checking workspace diff for fallback: ${err.message}`);
+  }
+}
+
+/**
+ * Commit & push only when codingSummary has content.
+ */
 async function commitAndPush(
   repoPath: string,
   prefix: string,
   timeZone: string
 ) {
+  if (!codingSummary) {
+    logMessage('No coding summary recorded this interval; skipping commit/push.');
+    return;
+  }
+
   try {
     await git.fetch();
     logMessage('Fetched origin/main');
@@ -418,32 +463,24 @@ async function commitAndPush(
     logMessage('Merged remote changes');
 
     const summaryFile = path.join(repoPath, SUMMARY_FILENAME);
+    fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
+    await git.add(SUMMARY_FILENAME);
+    logMessage('Updated coding summary file and staged changes.');
 
-    if (codingSummary) {
-      fs.appendFileSync(summaryFile, codingSummary, { encoding: 'utf8' });
-      await git.add(SUMMARY_FILENAME);
-      logMessage('Updated coding summary file and staged changes.');
-    } else {
-      logMessage('No coding summary recorded this interval; skipping summary file update.');
-    }
+    const badge = await metricsService.getDiffBadge(repoPath);
+    const ts = new Date().toLocaleString(undefined, { timeZone });
+    const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
+    await git.commit(msg);
+    logMessage(`Committed: "${msg}"`);
 
-    const diff = await git.diffSummary();
-    if (diff.files.length > 0) {
-      const badge = await metricsService.getDiffBadge(repoPath);
-      const ts = new Date().toLocaleString(undefined, { timeZone });
-      const msg = `${prefix} ${badge}Coding activity summary - ${ts}`.trim();
-      await git.commit(msg);
-      logMessage(`Committed: "${msg}"`);
+    await git.push('origin', 'main');
+    logMessage('Pushed to origin/main successfully.');
 
-      commitCount++;
-      if (commitCount % 10 === 0) {
-        vscode.window.showInformationMessage(`🎉 Milestone reached: ${commitCount} commits!`);
-      }
-
-      await git.push('origin', 'main');
-      logMessage('Pushed to origin/main successfully.');
-    } else {
-      logMessage('No repository changes to commit or push this interval.');
+    commitCount++;
+    if (commitCount % 10 === 0) {
+      vscode.window.showInformationMessage(
+        `🎉 Milestone reached: ${commitCount} Flaunt GitHub commits!`
+      );
     }
   } catch (err: any) {
     vscode.window.showErrorMessage(`Error during commit/push: ${err.message}`);
@@ -502,7 +539,7 @@ async function ensureLocalClone(
 function fmtDuration(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
+  const s = Math.floor(totalSeconds % 60);
   const parts: string[] = [];
   if (h) parts.push(`${h}h`);
   if (m) parts.push(`${m}m`);

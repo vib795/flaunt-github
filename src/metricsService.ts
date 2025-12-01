@@ -1,5 +1,4 @@
 import * as cp from 'child_process';
-import * as path from 'path';
 import { ExtensionContext, TextDocument, Uri } from 'vscode';
 
 export interface SessionInfo {
@@ -18,36 +17,29 @@ export class MetricsService {
     this.sessionStarts = new Map();
   }
 
-  /**
-   * Runs `git diff --shortstat HEAD` and parses insertions/deletions.
-   */
-  async computeDiffStats(repoPath: string): Promise<{ added: number; removed: number }> {
-    return new Promise((resolve, reject) => {
-      cp.exec('git diff --shortstat HEAD', { cwd: repoPath }, (err, stdout) => {
-        if (err) return reject(err);
-        const m = stdout.match(/(\d+) insertions*\(\+\).*?(\d+) deletions*\(-\)/);
-        resolve({
-          added: m ? parseInt(m[1], 10) : 0,
-          removed: m ? parseInt(m[2], 10) : 0,
-        });
-      });
+  async computeDiffStats(
+    repoPath: string
+  ): Promise<{ added: number; removed: number }> {
+    return new Promise((resolve) => {
+      cp.exec(
+        'git diff --shortstat HEAD',
+        { cwd: repoPath },
+        (err, stdout) => {
+          if (err) {
+            return resolve({ added: 0, removed: 0 });
+          }
+          const m = stdout.match(
+            /(\d+)\s+insertions*\(\+\).*?(\d+)\s+deletions*\(-\)/
+          );
+          resolve({
+            added: m ? parseInt(m[1], 10) : 0,
+            removed: m ? parseInt(m[2], 10) : 0
+          });
+        }
+      );
     });
   }
 
-  /**
-   * Convenience wrapper for summary diff (used by extension.ts).
-   */
-  async getDiffSummary(repoPath: string): Promise<{ added: number; removed: number }> {
-    try {
-      return await this.computeDiffStats(repoPath);
-    } catch {
-      return { added: 0, removed: 0 };
-    }
-  }
-
-  /**
-   * Returns a badge string like "+12/−5" or empty if no changes.
-   */
   async getDiffBadge(repoPath: string): Promise<string> {
     try {
       const { added, removed } = await this.computeDiffStats(repoPath);
@@ -58,64 +50,60 @@ export class MetricsService {
     }
   }
 
-  /**
-   * Increments count for the document's language.
-   */
+  async getDiffSummary(
+    repoPath: string
+  ): Promise<{ added: number; removed: number }> {
+    return this.computeDiffStats(repoPath);
+  }
+
   trackLanguage(doc: TextDocument) {
     const lang = doc.languageId;
     this.languageCounts[lang] = (this.languageCounts[lang] || 0) + 1;
     this.ctx.globalState.update('languageCounts', this.languageCounts);
   }
 
-  /**
-   * Returns a snapshot of language counts.
-   */
   getLanguageCounts(): Record<string, number> {
-    // read from globalState to be safe if something else updated it
-    const stored = this.ctx.globalState.get<Record<string, number>>('languageCounts', {});
-    return { ...stored };
+    return { ...this.languageCounts };
   }
 
-  /**
-   * Records session start timestamp for a document URI.
-   */
   startSession(uri: Uri) {
     this.sessionStarts.set(uri.toString(), Date.now());
   }
 
-  /**
-   * Calculates elapsed time and persists it in globalState.
-   */
   endSession(uri: Uri) {
     const key = uri.toString();
     const start = this.sessionStarts.get(key);
     if (!start) return;
+
     const seconds = (Date.now() - start) / 1000;
-    const prev = this.ctx.globalState.get<Record<string, number>>('sessionDurations', {});
+    const prev =
+      this.ctx.globalState.get<Record<string, number>>(
+        'sessionDurations',
+        {}
+      );
     prev[key] = (prev[key] || 0) + seconds;
     this.ctx.globalState.update('sessionDurations', prev);
     this.sessionStarts.delete(key);
   }
 
-  /**
-   * Returns per-file session durations as a list, used by showMetrics().
-   */
   getSessions(): SessionInfo[] {
-    const durations = this.ctx.globalState.get<Record<string, number>>('sessionDurations', {});
-    const sessions: SessionInfo[] = [];
+    const durations =
+      this.ctx.globalState.get<Record<string, number>>(
+        'sessionDurations',
+        {}
+      );
+    const results: SessionInfo[] = [];
 
-    for (const [key, totalSeconds] of Object.entries(durations)) {
+    for (const [uri, secs] of Object.entries(durations)) {
       try {
-        const uri = Uri.parse(key);
-        const fsPath = uri.fsPath || uri.path || key;
-        const fileName = path.basename(fsPath);
-        sessions.push({ fileName, totalSeconds });
+        const parsed = Uri.parse(uri);
+        const fileName = parsed.fsPath || uri;
+        results.push({ fileName, totalSeconds: secs });
       } catch {
-        // fallback: use raw key if Uri.parse fails
-        sessions.push({ fileName: key, totalSeconds });
+        results.push({ fileName: uri, totalSeconds: secs });
       }
     }
 
-    return sessions;
+    return results;
   }
 }
