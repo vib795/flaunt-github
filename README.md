@@ -21,7 +21,9 @@ If you keep autosave on and never press <kbd>Ctrl+S</kbd>/<kbd>Cmd+S</kbd>, it s
 
 ---
 
-## 🆕 What’s New in v2.1.1
+## 🆕 What’s New in v2.1.2
+**Version: 2.1.2**
+Downgraded `vscode` to `^1.90.0` to make it compatible with a wider range of VS Code versions.
 
 **Version: 2.1.1**
 
