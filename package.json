@@ -1,10 +1,21 @@
 {
   "name": "flaunt-github",
-  "displayName": "flaunt-github",
-  "description": "",
-  "version": "2.1.2",
+  "displayName": "Flaunt GitHub",
+  "description": "Passively tracks coding activity and commits a rolling journal to a private GitHub repo. Dashboard, shareable profile badge, optional AI daily summaries.",
+  "version": "3.0.2",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
+  "license": "MIT",
+  "keywords": [
+    "coding activity",
+    "productivity",
+    "metrics",
+    "github",
+    "contributions",
+    "journal",
+    "streak",
+    "wakatime"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/vib795/flaunt-github.git"
@@ -13,7 +24,8 @@
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "SCM Providers"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -21,33 +33,94 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "codeTracking.start",
-        "title": "Start Code Tracking"
-      },
-      {
-        "command": "codeTracking.showMetrics",
-        "title": "Show Code Tracking Metrics"
-      }
+      { "command": "codeTracking.start", "title": "Flaunt GitHub: Commit Now", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.showMetrics", "title": "Flaunt GitHub: Show Metrics (log)", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.showDashboard", "title": "Flaunt GitHub: Open Dashboard", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.pause", "title": "Flaunt GitHub: Pause Tracking", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.resume", "title": "Flaunt GitHub: Resume Tracking", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.refreshAuth", "title": "Flaunt GitHub: Refresh GitHub Auth", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.resetConsent", "title": "Flaunt GitHub: Reset Consent Prompt", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.openTrackingRepo", "title": "Flaunt GitHub: Open Tracking Repo", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.generateBadge", "title": "Flaunt GitHub: Generate Profile Badge", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.exportMetrics", "title": "Flaunt GitHub: Export Metrics", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.showLog", "title": "Flaunt GitHub: Show Log", "category": "Flaunt GitHub" },
+      { "command": "codeTracking.showMenu", "title": "Flaunt GitHub: Show Menu", "category": "Flaunt GitHub" }
     ],
     "configuration": {
       "type": "object",
-      "title": "Code Tracking Configuration",
+      "title": "Flaunt GitHub",
       "properties": {
         "codeTracking.githubToken": {
           "type": "string",
-          "description": "Your GitHub Personal Access Token with repo permissions",
+          "description": "Fallback GitHub Personal Access Token with repo scope. Prefer VS Code's built-in GitHub sign-in; this setting is used only if both Secret Storage and the VS Code auth provider fail.",
           "default": ""
         },
         "codeTracking.githubUsername": {
           "type": "string",
-          "description": "Your GitHub username",
+          "description": "Fallback GitHub username, paired with codeTracking.githubToken.",
           "default": ""
         },
         "codeTracking.commitInterval": {
           "type": "number",
-          "description": "Time in minutes between each automatic commit",
-          "default": 30
+          "description": "Minutes between automatic commits.",
+          "default": 30,
+          "minimum": 1
+        },
+        "codeTracking.commitMessagePrefix": {
+          "type": "string",
+          "description": "Prefix prepended to each automatic commit message.",
+          "default": "[Flaunt]"
+        },
+        "codeTracking.timeZone": {
+          "type": "string",
+          "description": "IANA timezone used for timestamps. Defaults to your system timezone.",
+          "default": ""
+        },
+        "codeTracking.trackFileOpens": {
+          "type": "boolean",
+          "description": "Log an entry every time a file is opened (noisy).",
+          "default": false
+        },
+        "codeTracking.ignoreGlobs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns of file paths that should never be logged (checked relative to the workspace root).",
+          "default": [
+            "**/.env",
+            "**/.env.*",
+            "**/secrets/**",
+            "**/*.pem",
+            "**/*.key",
+            "**/id_rsa*",
+            "**/credentials*",
+            "**/.aws/**",
+            "**/.ssh/**"
+          ]
+        },
+        "codeTracking.paused": {
+          "type": "boolean",
+          "description": "When true, Flaunt GitHub records activity but does not commit or push. Toggle from the status bar menu.",
+          "default": false
+        },
+        "codeTracking.redactPaths": {
+          "type": "boolean",
+          "description": "When true, file paths in commits are replaced with <redacted:depth>.ext placeholders. Language and counts still tracked.",
+          "default": false
+        },
+        "codeTracking.aiSummary.enabled": {
+          "type": "boolean",
+          "description": "Enable a daily AI-written journal entry summarizing your activity. Requires an Anthropic API key.",
+          "default": false
+        },
+        "codeTracking.aiSummary.anthropicApiKey": {
+          "type": "string",
+          "description": "Anthropic API key used for AI daily summaries. Stored in user settings; use Secret Storage via the extension if you prefer.",
+          "default": ""
+        },
+        "codeTracking.aiSummary.model": {
+          "type": "string",
+          "description": "Anthropic model for daily summaries.",
+          "default": "claude-haiku-4-5"
         }
       }
     }
@@ -55,6 +128,10 @@
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --platform=node --target=node14 --outfile=dist/extension.js --external:vscode",
     "watch": "esbuild src/extension.ts --bundle --platform=node --target=node14 --outfile=dist/extension.js --external:vscode --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test:compile": "tsc -p tsconfig.test.json",
+    "test": "npm run test:compile && mocha --ui tdd \"out-test/test/**/*.test.js\"",
     "vscode:prepublish": "npm run build",
     "package": "vsce package"
   },
@@ -68,10 +145,8 @@
     "@vscode/test-electron": "^2.4.1",
     "esbuild": "^0.27.0",
     "eslint": "^9.19.0",
-    "ts-loader": "^9.5.2",
-    "typescript": "^4.9.5",
-    "webpack": "^5.97.1",
-    "webpack-cli": "^6.0.1"
+    "mocha": "^10.7.3",
+    "typescript": "^5.5.4"
   },
   "dependencies": {
     "@octokit/rest": "^22.0.1",

@@ -1,4 +1,5 @@
 out
+out-test
 dist
 node_modules
 .vscode-test/
@@ -6,5 +7,7 @@ node_modules
 .vscode
 .vscode-test.mjs
 .vscodeignore
+.github/
+CLAUDE.md
 CHANGELOG.md
 .DS_Store
