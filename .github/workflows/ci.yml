@@ -25,7 +25,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx vsce package --no-dependencies --out flaunt-github.vsix
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: flaunt-github-vsix
           path: flaunt-github.vsix
