@@ -1,10 +1,19 @@
 # Flaunt GitHub
 
+[![CI](https://github.com/vib795/flaunt-github/actions/workflows/ci.yml/badge.svg)](https://github.com/vib795/flaunt-github/actions/workflows/ci.yml)
+
 **Flaunt GitHub** is a VS Code / Cursor extension that quietly tracks your coding activity and commits a rolling journal to a **private** `code-tracking` repo in your GitHub account. Your contribution graph stays green, and you get a searchable history of what you actually worked on.
 
 ---
 
-## What's new in v3.0
+## What's new
+
+### v3.0.2
+
+- 🕒 **Timezone-safe formatting** — empty / invalid `codeTracking.timeZone` values fall back to the system zone instead of crashing the commit tick.
+- 📝 **Per-save log lines restored** — `Saved ...`, `Auto-snapshot ...`, and `Workspace diff snapshot ...` lines appear in the `FlauntGitHubLog` channel as activity happens, not just at commit time.
+
+### v3.0.0 highlights
 
 - 🧱 **Modular architecture** — auth, repo, interval, activity, status, commands are separate modules with unit tests.
 - 🔐 **Tokens never persisted in `.git/config`** — credentials are injected per-operation via `http.extraheader`.
@@ -112,6 +121,38 @@ npm run package    # vsce package
 ```
 
 Unit tests live under `src/test/*.test.ts`. They compile to `out-test/` and run in plain Node (no Electron harness required).
+
+## Releasing
+
+Releases are fully automated through GitHub Actions.
+
+1. Bump `version` in `package.json` (use semver — patch for fixes, minor for features, major for breaking changes).
+2. Commit the bump: `git commit -am "Release v<version>"`.
+3. Tag and push the tag:
+   ```bash
+   git tag v<version>
+   git push origin master --tags
+   ```
+4. The `Release` workflow (`.github/workflows/release.yml`) fires on any `v*` tag and:
+   - Verifies the tag matches the `package.json` version.
+   - Runs typecheck, lint, tests, and build.
+   - Packages `flaunt-github-<version>.vsix`.
+   - Creates a GitHub Release with auto-generated notes and attaches the `.vsix`.
+   - Publishes to the VS Code Marketplace if the `VSCE_PAT` secret is set.
+   - Publishes to Open VSX if the `OVSX_PAT` secret is set.
+
+You can also re-run a release manually from the Actions tab (`workflow_dispatch`) by supplying a tag.
+
+### Required repo secrets
+
+| Secret | Purpose |
+|---|---|
+| `VSCE_PAT` | Personal access token for `vsce publish` (VS Code Marketplace). |
+| `OVSX_PAT` | Personal access token for `ovsx publish` (Open VSX Registry). |
+
+Both are optional; the workflow skips whichever is missing and still creates the GitHub Release.
+
+The pre-release heuristic treats any tag that contains a hyphen (e.g. `v3.1.0-beta.1`) as a GitHub pre-release.
 
 ## License
 
