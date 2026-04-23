@@ -5,6 +5,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # @types/vscode must stay aligned with engines.vscode (^1.90 for compat).
+      # If you bump engines.vscode, lift this block too.
+      - dependency-name: "@types/vscode"
+      # TypeScript 6 requires a coordinated typescript-eslint/ts-loader bump
+      # that the ecosystem hasn't fully landed. Allow minor/patch only.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       types:
         patterns:
