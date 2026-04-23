@@ -151,6 +151,6 @@
   "dependencies": {
     "@octokit/rest": "^22.0.1",
     "@vscode/vsce": "^3.7.1",
-    "simple-git": "^3.27.0"
+    "simple-git": "^3.36.0"
   }
 }
