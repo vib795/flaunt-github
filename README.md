@@ -124,35 +124,48 @@ Unit tests live under `src/test/*.test.ts`. They compile to `out-test/` and run 
 
 ## Releasing
 
-Releases are fully automated through GitHub Actions.
+Releases are automated through three workflows. The happy path is a single commit:
 
-1. Bump `version` in `package.json` (use semver — patch for fixes, minor for features, major for breaking changes).
-2. Commit the bump: `git commit -am "Release v<version>"`.
-3. Tag and push the tag:
+1. Bump `version` in `package.json` (semver).
+2. Commit and push to `master`:
    ```bash
-   git tag v<version>
-   git push origin master --tags
+   git commit -am "Release v<version>"
+   git push origin master
    ```
-4. The `Release` workflow (`.github/workflows/release.yml`) fires on any `v*` tag and:
-   - Verifies the tag matches the `package.json` version.
-   - Runs typecheck, lint, tests, and build.
+3. **`auto-tag.yml`** sees the new version, checks that no matching `v<version>` tag exists, creates the tag, and pushes it.
+4. **`release.yml`** fires on the new `v*` tag and:
+   - Verifies the tag matches `package.json` version.
+   - Runs typecheck, lint, tests, build.
    - Packages `flaunt-github-<version>.vsix`.
-   - Creates a GitHub Release with auto-generated notes and attaches the `.vsix`.
-   - Publishes to the VS Code Marketplace if the `VSCE_PAT` secret is set.
-   - Publishes to Open VSX if the `OVSX_PAT` secret is set.
+   - Creates a GitHub Release with auto-generated notes and the `.vsix` asset attached.
+   - Publishes to Open VSX if `OVSX_PAT` is set.
+   - Leaves a Marketplace reminder in the workflow log — **VS Code Marketplace is published manually**:
+     ```bash
+     npx vsce publish --packagePath flaunt-github-<version>.vsix
+     ```
 
-You can also re-run a release manually from the Actions tab (`workflow_dispatch`) by supplying a tag.
+You can also trigger `release.yml` manually from the Actions tab (`workflow_dispatch`) by supplying a tag.
+
+### Tag conventions
+
+- Final releases: `v3.0.2`, `v3.1.0`, …
+- Pre-releases (tag contains a hyphen): `v3.1.0-beta.1` — marked as GitHub pre-release automatically.
 
 ### Required repo secrets
 
-| Secret | Purpose |
-|---|---|
-| `VSCE_PAT` | Personal access token for `vsce publish` (VS Code Marketplace). |
-| `OVSX_PAT` | Personal access token for `ovsx publish` (Open VSX Registry). |
+| Secret | Purpose | Required? |
+|---|---|---|
+| `OVSX_PAT` | `ovsx publish` (Open VSX Registry). | Optional — step is skipped if absent. |
 
-Both are optional; the workflow skips whichever is missing and still creates the GitHub Release.
+No Marketplace secret is used by the workflow; that step is intentionally manual.
 
-The pre-release heuristic treats any tag that contains a hyphen (e.g. `v3.1.0-beta.1`) as a GitHub pre-release.
+### Dependency maintenance
+
+`.github/dependabot.yml` opens weekly PRs for:
+- npm dependencies (grouped: `@types/*`, eslint + typescript-eslint, build tools).
+- GitHub Actions versions (so `actions/checkout@v4` → `v5` lands as a PR rather than silent rot).
+
+Merge those and CI re-verifies; no manual bumps needed.
 
 ## License
 
