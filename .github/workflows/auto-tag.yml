@@ -10,6 +10,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag:
@@ -30,14 +31,29 @@ jobs:
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Tag if new
+        id: tagstep
         run: |
           TAG="${{ steps.pkg.outputs.tag }}"
           if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "::notice::Tag ${TAG} already exists; nothing to do."
+            echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "${TAG}" -m "Release ${TAG}"
           git push origin "${TAG}"
-          echo "::notice::Created and pushed tag ${TAG} — Release workflow will take over."
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Created and pushed tag ${TAG}."
+
+      # A tag pushed with GITHUB_TOKEN does NOT fire the Release workflow's
+      # `on: push: tags` trigger (GitHub blocks recursive event triggering).
+      # Dispatch it explicitly instead — workflow_dispatch via the API is not
+      # subject to that restriction (needs `actions: write`).
+      - name: Trigger Release workflow
+        if: steps.tagstep.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run release.yml -f tag="${{ steps.pkg.outputs.tag }}"
+          echo "::notice::Dispatched Release workflow for ${{ steps.pkg.outputs.tag }}."
