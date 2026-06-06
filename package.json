@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "Flaunt GitHub",
   "description": "Passively tracks coding activity and commits a rolling journal to a private GitHub repo. Dashboard, shareable profile badge, optional AI daily summaries.",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "license": "MIT",
