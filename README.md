@@ -8,6 +8,23 @@
 
 ## What's new
 
+### v3.0.6
+
+- 📝 **Marketplace listing refresh** — this "What's new" section now tracks every release (the v3.0.3–v3.0.5 entries below were previously missing from the Marketplace overview).
+
+### v3.0.5
+
+- 🔒 **Zero known vulnerabilities** — cleared every open security advisory. `serialize-javascript` (RCE + CPU DoS), `diff` (jsdiff DoS), and `brace-expansion` (DoS) are pinned via npm `overrides`; `esbuild` bumped to 0.28.1. `npm audit` reports 0 vulnerabilities for both the full and production trees.
+- ⬆️ **Toolchain refresh** — `@types/node`, `eslint` + `typescript-eslint`, and `@vscode/test-electron` 3.x updated. All changes are dev/build tooling — the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
+
+### v3.0.4
+
+- 🤖 **Reliable release automation** — tagging a version bump now consistently triggers the Release workflow (explicit `workflow_dispatch`), and the dispatch path resolves the tag correctly instead of mistaking the branch name for the tag.
+
+### v3.0.3
+
+- ⬆️ **`simple-git` 3.36** — the one runtime dependency change shipped to users (upstream bug fixes, no behavior change), bundled with accumulated dev-toolchain and security updates.
+
 ### v3.0.2
 
 - 🕒 **Timezone-safe formatting** — empty / invalid `codeTracking.timeZone` values fall back to the system zone instead of crashing the commit tick.
