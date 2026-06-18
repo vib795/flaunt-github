@@ -8,6 +8,10 @@
 
 ## What's new
 
+### v3.0.7
+
+- 🔒 **Security patch** — cleared three newly-disclosed advisories in the build toolchain: `markdown-it` quadratic-complexity DoS (advisory #51), `form-data` CRLF injection (high), and `js-yaml` merge-key DoS, all pinned via npm `overrides`. `@typescript-eslint` updated to 8.61.1. `npm audit` reports 0 vulnerabilities for both the full and production trees; the shipped runtime is unchanged.
+
 ### v3.0.6
 
 - 📝 **Marketplace listing refresh** — this "What's new" section now tracks every release (the v3.0.3–v3.0.5 entries below were previously missing from the Marketplace overview).
