@@ -8,6 +8,10 @@
 
 ## What's new
 
+### v3.0.9
+
+- 🧹 **Dependency maintenance** — routine dev-toolchain refresh: `@types/node` 26.x, `@typescript-eslint` 8.62, `@vscode/test-cli` 0.0.15, and the `actions/checkout` CI action to v7. `npm audit` reports 0 vulnerabilities for both the full and production trees. All changes are dev/CI tooling — the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
+
 ### v3.0.8
 
 - 🔒 **Security patch** — cleared seven newly-disclosed `undici` advisories (two high: TLS validation bypass in the SOCKS5 ProxyAgent and shared-cache cross-user disclosure, plus five moderate/low) reaching the build toolchain transitively through `@vscode/vsce → cheerio`. Pinned to `undici >=7.28.0 <8` via npm `overrides`, staying on the v7 line `cheerio` expects. `npm audit` reports 0 vulnerabilities for both the full and production trees; the shipped runtime is unchanged.
