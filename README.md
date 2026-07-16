@@ -8,6 +8,10 @@
 
 ## What's new
 
+### v3.0.10
+
+- 🧹 **Dependency maintenance** — routine dev-toolchain refresh: `@types/node` 26.1, `@typescript-eslint` 8.64, `eslint` 10.7, and the `actions/setup-node` CI action to v7. `npm audit` reports 0 vulnerabilities for both the full and production trees. All changes are dev/CI tooling — the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
+
 ### v3.0.9
 
 - 🧹 **Dependency maintenance** — routine dev-toolchain refresh: `@types/node` 26.x, `@typescript-eslint` 8.62, `@vscode/test-cli` 0.0.15, and the `actions/checkout` CI action to v7. `npm audit` reports 0 vulnerabilities for both the full and production trees. All changes are dev/CI tooling — the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
