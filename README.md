@@ -169,7 +169,7 @@ Releases are automated through three workflows. The happy path is a single commi
    git commit -am "Release v<version>"
    git push origin master
    ```
-3. **`auto-tag.yml`** sees the new version, checks that no matching `v<version>` tag exists, creates the tag, and pushes it.
+3. **`auto-tag.yml`** sees the new version, checks that no matching `v<version>` tag exists, and creates the tag via the GitHub REST API (`git push origin <tag>` is not used — it started failing with `remote: Internal Server Error`).
 4. **`release.yml`** fires on the new `v*` tag and:
    - Verifies the tag matches `package.json` version.
    - Runs typecheck, lint, tests, build.
