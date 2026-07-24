@@ -18,10 +18,9 @@ jobs:
     # Skip commits authored by this workflow to avoid recursion.
     if: "!contains(github.event.head_commit.message, 'chore: tag v')"
     steps:
+      # Shallow checkout is enough — the tag check and creation both go through
+      # the API now, so no local history or tags are needed.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Read version
         id: pkg
@@ -30,21 +29,32 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
+      # Tags are created through the REST API rather than `git push origin <tag>`.
+      # The git path began rejecting tag pushes with `remote: Internal Server
+      # Error` (reproducibly, with no ruleset or tag protection configured),
+      # which silently blocked the v3.0.11 release. The API path is unaffected.
       - name: Tag if new
         id: tagstep
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.pkg.outputs.tag }}"
-          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
             echo "::notice::Tag ${TAG} already exists; nothing to do."
             echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "Release ${TAG}"
-          git push origin "${TAG}"
+          TAG_SHA="$(gh api -X POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="${TAG}" \
+            -f message="Release ${TAG}" \
+            -f object="${GITHUB_SHA}" \
+            -f type=commit \
+            -q .sha)"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${TAG}" \
+            -f sha="${TAG_SHA}" >/dev/null
           echo "created=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::Created and pushed tag ${TAG}."
+          echo "::notice::Created tag ${TAG} at ${GITHUB_SHA} via the REST API."
 
       # A tag pushed with GITHUB_TOKEN does NOT fire the Release workflow's
       # `on: push: tags` trigger (GitHub blocks recursive event triggering).
