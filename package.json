@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "Flaunt GitHub",
   "description": "Passively tracks coding activity and commits a rolling journal to a private GitHub repo. Dashboard, shareable profile badge, optional AI daily summaries.",
-  "version": "3.0.10",
+  "version": "3.0.11",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "license": "MIT",
@@ -139,8 +139,8 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.0",
     "@types/vscode": "^1.90.0",
-    "@typescript-eslint/eslint-plugin": "^8.62.1",
-    "@typescript-eslint/parser": "^8.62.1",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "@vscode/vsce": "^3.9.2",
@@ -156,10 +156,12 @@
   "overrides": {
     "serialize-javascript": ">=7.0.5",
     "diff": ">=8.0.3",
-    "brace-expansion": ">=5.0.6",
+    "brace-expansion": ">=5.0.7 <6",
     "markdown-it": ">=14.2.0",
+    "linkify-it": ">=5.0.2 <6",
     "form-data": ">=4.0.6",
-    "js-yaml": ">=4.2.0",
+    "js-yaml": ">=4.3.0 <5",
+    "fast-uri": ">=3.1.4 <4",
     "undici": ">=7.28.0 <8"
   }
 }
