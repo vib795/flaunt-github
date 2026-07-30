@@ -8,6 +8,10 @@
 
 ## What's new
 
+### v3.0.12
+
+- 🧹 **Dependency maintenance** — routine dev-toolchain refresh: `@types/node` 26.1.2, `eslint` 10.8.0, and `@vscode/test-electron` 3.1.0. `npm audit` reports 0 vulnerabilities for both the full and production trees. All changes are dev/CI tooling — the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
+
 ### v3.0.11
 
 - 🔒 **Security patch** — cleared five high-severity advisories across four build-toolchain packages: `linkify-it` quadratic-complexity DoS (via `markdown-it`), `brace-expansion` exponential-time expansion DoS (via `minimatch`), `js-yaml` merge-key quadratic CPU (the advisory range widened to `<4.3.0`, so the previous `>=4.2.0` pin was still exposed), and two `fast-uri` host-confusion advisories. All pinned via npm `overrides` with explicit major-version ceilings so a transitive dep can't silently jump a major. `@typescript-eslint` updated to 8.65. `npm audit` reports 0 vulnerabilities for both the full and production trees; the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
