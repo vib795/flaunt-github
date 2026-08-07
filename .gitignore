@@ -6,7 +6,9 @@ node_modules
 *.vsix
 .vscode
 .vscode-test.mjs
-.vscodeignore
+.env
+.env.*
 CLAUDE.md
+AGENTS.md
 CHANGELOG.md
 .DS_Store

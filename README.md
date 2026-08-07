@@ -8,6 +8,10 @@
 
 ## What's new
 
+### v3.0.13
+
+- 🔒 **Security patch** — cleared four high-severity advisories in the build toolchain, all reached transitively: `undici` (five advisories at once — response desynchronization via the retry interceptor, cross-user disclosure + parse-time crash on degenerate private cache directives, CRLF injection via a blob-like body `type`, cache-directive whitespace disclosure, and cookie attribute injection), `fast-uri` host confusion via a backslash authority introducer, `brace-expansion` unbounded-intermediate-array DoS that bypassed the earlier CVE-2026-14257 mitigation, and `js-yaml` quadratic CPU in `!!omap` resolution. The `brace-expansion` and `js-yaml` advisory ranges widened past the pins added in v3.0.11, so those floors were raised: `undici >=7.29.0 <8`, `fast-uri >=3.1.5 <4`, `brace-expansion >=5.0.9 <6`, `js-yaml >=4.3.1 <5` — still via npm `overrides` with explicit major-version ceilings so a transitive dep can't silently jump a major. `mocha` updated to 11.8.0. `npm audit` reports 0 vulnerabilities for both the full and production trees; the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
+
 ### v3.0.12
 
 - 🧹 **Dependency maintenance** — routine dev-toolchain refresh: `@types/node` 26.1.2, `eslint` 10.8.0, and `@vscode/test-electron` 3.1.0. `npm audit` reports 0 vulnerabilities for both the full and production trees. All changes are dev/CI tooling — the shipped runtime (`simple-git`, `@octokit/rest`) is unchanged.
