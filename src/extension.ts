@@ -158,9 +158,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  if (cfg.paused) {
-    status.setState({ kind: 'paused' });
-  }
+  // start() schedules and settles the bar itself, honouring cfg.paused — setting
+  // 'paused' before it would just be overwritten by the countdown.
   runner.start();
   log(`Flaunt GitHub ready. Local repo: ${localRepoPath}`);
 }
