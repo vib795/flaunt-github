@@ -3,7 +3,7 @@ import { log, showLogChannel } from './logger';
 import { setPaused, readConfig } from './config';
 import { refreshCredentials } from './auth';
 import { resetConsent } from './consent';
-import { IntervalRunner } from './intervalRunner';
+import { IntervalRunner, TickOutcome } from './intervalRunner';
 import { Dashboard } from './dashboard';
 import { generateBadge } from './badge';
 import { exportMetrics } from './exporter';
@@ -21,13 +21,26 @@ export interface CommandDeps {
   onCredsRefreshed: (creds: PushCredentials) => void;
 }
 
+const COMMIT_NOW_MESSAGE: Record<TickOutcome, string> = {
+  committed: 'Flaunt GitHub: commit pushed.',
+  'no-activity': 'Flaunt GitHub: nothing new to commit.',
+  busy: 'Flaunt GitHub: a commit is already in progress.',
+  paused: 'Flaunt GitHub: tracking is paused.',
+  failed: 'Flaunt GitHub: commit failed — activity saved, will retry.'
+};
+
 export function registerCommands(deps: CommandDeps): void {
   const { ctx, runner, dashboard, metrics, repo } = deps;
 
   ctx.subscriptions.push(
     vscode.commands.registerCommand('codeTracking.start', async () => {
-      await runner.runOnce(true);
-      vscode.window.showInformationMessage('Flaunt GitHub: commit attempted.');
+      const outcome = await runner.runOnce(true);
+      const message = COMMIT_NOW_MESSAGE[outcome];
+      if (outcome === 'failed') {
+        vscode.window.showWarningMessage(message);
+      } else {
+        vscode.window.showInformationMessage(message);
+      }
     }),
 
     vscode.commands.registerCommand('codeTracking.showMetrics', async () => {

@@ -8,6 +8,20 @@ import { PushCredentials } from './types';
 
 export const REPO_NAME = 'code-tracking';
 
+/**
+ * Rolling stall timeout for every spawned `git`: the clock resets on each byte
+ * of output, so a slow-but-progressing transfer is safe and only a truly wedged
+ * process is killed. Without it a hung fetch/push pins IntervalRunner's
+ * `running` flag for the life of the window — every later tick logs "previous
+ * commit still in progress" and returns, so tracking silently stops and the
+ * status bar sits on "committing" forever. A kill surfaces as a rejected
+ * promise, which the runner already handles by restoring and persisting the
+ * drained entries for the next tick.
+ */
+const GIT_STALL_TIMEOUT_MS = 60_000;
+
+const GIT_OPTIONS = { timeout: { block: GIT_STALL_TIMEOUT_MS } };
+
 export async function ensureRemoteRepo(
   octokit: Octokit,
   owner: string
@@ -42,7 +56,7 @@ export async function ensureLocalClone(
   if (!fs.existsSync(path.join(localRepoPath, '.git'))) {
     fs.mkdirSync(path.dirname(localRepoPath), { recursive: true });
     log(`Cloning ${safeRemote}...`);
-    await simpleGit().raw([
+    await simpleGit(GIT_OPTIONS).raw([
       '-c',
       `http.extraheader=${header}`,
       'clone',
@@ -53,7 +67,7 @@ export async function ensureLocalClone(
     return;
   }
 
-  const git = simpleGit(localRepoPath);
+  const git = simpleGit(localRepoPath, GIT_OPTIONS);
   const remotes = await git.getRemotes(true);
   const origin = remotes.find((r) => r.name === 'origin');
   if (!origin || origin.refs.push !== safeRemote) {
@@ -86,7 +100,7 @@ export class TrackingRepo {
   private branchCache?: string;
 
   constructor(public readonly localPath: string, creds: PushCredentials) {
-    this.git = simpleGit(localPath);
+    this.git = simpleGit(localPath, GIT_OPTIONS);
     this.creds = creds;
   }
 

@@ -1,11 +1,7 @@
 import * as vscode from 'vscode';
+import { StatusState } from './statusState';
 
-export type StatusState =
-  | { kind: 'initializing' }
-  | { kind: 'paused' }
-  | { kind: 'waiting'; nextAt: number }
-  | { kind: 'committing' }
-  | { kind: 'error'; message: string };
+export { StatusState };
 
 const COMMAND_ID = 'codeTracking.showMenu';
 
@@ -28,6 +24,10 @@ export class StatusBar implements vscode.Disposable {
   setState(state: StatusState): void {
     this.state = state;
     this.render();
+  }
+
+  getState(): StatusState {
+    return this.state;
   }
 
   private render(): void {

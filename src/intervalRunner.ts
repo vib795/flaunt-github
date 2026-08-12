@@ -5,11 +5,21 @@ import { ActivityTracker } from './activityTracker';
 import { TrackingRepo } from './trackingRepo';
 import { PendingQueue } from './pendingQueue';
 import { StatusBar } from './statusBar';
+import { settledStatus } from './statusState';
 import { FlauntConfig, ActivityEntry } from './types';
 import { buildCommitMessage, writeJournal } from './journal';
 import { MetricsService } from './metricsService';
 
 const MILESTONE_KEY = 'codeTracking.commitMilestone';
+const ERROR_DWELL_MS = 5000;
+
+/** Why a tick ended, so `Commit Now` can report what actually happened. */
+export type TickOutcome =
+  | 'committed'
+  | 'no-activity'
+  | 'busy'
+  | 'paused'
+  | 'failed';
 
 export interface IntervalRunnerDeps {
   tracker: ActivityTracker;
@@ -23,6 +33,8 @@ export interface IntervalRunnerDeps {
 
 export class IntervalRunner {
   private timer?: NodeJS.Timeout;
+  private errorTimer?: NodeJS.Timeout;
+  private errorSince = 0;
   private stopped = false;
   private running = false;
   private nextAt = 0;
@@ -46,6 +58,10 @@ export class IntervalRunner {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
+    if (this.errorTimer) {
+      clearTimeout(this.errorTimer);
+      this.errorTimer = undefined;
+    }
   }
 
   intervalChanged(): void {
@@ -53,15 +69,15 @@ export class IntervalRunner {
     this.schedule();
   }
 
-  async runOnce(force = false): Promise<void> {
-    await this.tick(force);
+  async runOnce(force = false): Promise<TickOutcome> {
+    return this.tick(force);
   }
 
   private schedule(): void {
     if (this.stopped) {return;}
     const intervalMs = this.deps.getConfig().commitIntervalMinutes * 60_000;
     this.nextAt = Date.now() + intervalMs;
-    this.deps.status.setState({ kind: 'waiting', nextAt: this.nextAt });
+    this.settleStatus();
 
     this.timer = setTimeout(async () => {
       await this.tick(false);
@@ -69,27 +85,55 @@ export class IntervalRunner {
     }, intervalMs);
   }
 
-  private async tick(forced: boolean): Promise<void> {
+  /**
+   * Return the bar to a resting state. Every path that leaves `committing`
+   * showing has to come through here — a forced tick has no scheduling
+   * continuation behind it, so nothing else would ever clear it.
+   *
+   * The error dwell is measured, not timer-driven: if the dwell timer fires
+   * while a tick happens to be running it is dropped, and a stale error would
+   * otherwise persist forever. Any later settle clears it instead.
+   */
+  private settleStatus(): void {
+    // `running` is cleared before the tick's own settle call, so this only
+    // suppresses outside callers (a config change, the error dwell) from
+    // replacing 'committing' while a commit is genuinely in flight.
+    if (this.stopped || this.running) {return;}
+    const { status } = this.deps;
+    const current = status.getState();
+    status.setState(
+      settledStatus(current, {
+        paused: this.deps.getConfig().paused,
+        nextAt: this.nextAt,
+        clearError:
+          current.kind === 'error' &&
+          Date.now() - this.errorSince >= ERROR_DWELL_MS
+      })
+    );
+  }
+
+  private async tick(forced: boolean): Promise<TickOutcome> {
     if (this.running) {
       log('Skipping tick: previous commit still in progress.');
-      return;
+      return 'busy';
     }
     const cfg = this.deps.getConfig();
     if (cfg.paused && !forced) {
       log('Tracker is paused; skipping tick.');
       this.deps.status.setState({ kind: 'paused' });
-      return;
+      return 'paused';
     }
 
     this.running = true;
     try {
-      await this.executeTick(cfg);
+      return await this.executeTick(cfg);
     } finally {
       this.running = false;
+      this.settleStatus();
     }
   }
 
-  private async executeTick(cfg: FlauntConfig): Promise<void> {
+  private async executeTick(cfg: FlauntConfig): Promise<TickOutcome> {
     const { tracker, repo, pending, status, metrics } = this.deps;
 
     if (!tracker.hadSave() && tracker.isEmpty()) {
@@ -98,13 +142,13 @@ export class IntervalRunner {
         const ws = await tracker.captureWorkspaceDiff();
         if (!ws && tracker.isEmpty()) {
           log('No activity this interval; skipping commit.');
-          return;
+          return 'no-activity';
         }
       }
     }
 
     const entries = tracker.drain();
-    if (entries.length === 0) {return;}
+    if (entries.length === 0) {return 'no-activity';}
 
     status.setState({ kind: 'committing' });
 
@@ -115,7 +159,7 @@ export class IntervalRunner {
       const result = writeJournal(repo.localPath, entries, cfg.timeZone);
       if (result.files.length === 0) {
         log('No journal files produced; skipping commit.');
-        return;
+        return 'no-activity';
       }
 
       const diff = await repo.diffSummary();
@@ -129,21 +173,26 @@ export class IntervalRunner {
       const committed = await repo.commit(message, result.files);
       if (!committed) {
         log('Nothing staged after journal write; skipping push.');
-        return;
+        return 'no-activity';
       }
 
       await repo.push();
       log(`Pushed commit: "${message}"`);
       pending.clear();
       await this.noteMilestone();
+      return 'committed';
     } catch (e) {
       logError('Commit/push failed; persisting activity for retry', e);
       tracker.restore(entries);
       pending.persist([...pending.load(), ...entries.filter(Boolean)]);
       status.setState({ kind: 'error', message: 'push failed — will retry' });
-      setTimeout(() => {
-        status.setState({ kind: 'waiting', nextAt: this.nextAt });
-      }, 5000);
+      this.errorSince = Date.now();
+      if (this.errorTimer) {clearTimeout(this.errorTimer);}
+      this.errorTimer = setTimeout(() => {
+        this.errorTimer = undefined;
+        this.settleStatus();
+      }, ERROR_DWELL_MS);
+      return 'failed';
     }
   }
 
