@@ -13,7 +13,7 @@
 - ✨ **Commits are now spaced randomly instead of on a fixed clock.** A fixed interval meant every coding day produced roughly the same commit count, so a year of contributions rendered as one flat shade of green — recognisably automated. Each tick now waits a random time drawn from `codeTracking.commitIntervalMin`–`codeTracking.commitIntervalMax` (default **20–45 minutes**), so daily totals spread out and the graph varies the way hand-made commits do. The status bar countdown shows the real drawn interval, and the output channel logs it each time.
   - The range width is the dial: `25`–`35` barely moves the needle, `15`–`90` is visibly textured. Nothing else changes — the journal content, commit messages, and push behaviour are identical.
   - **Existing setups are untouched.** `codeTracking.commitInterval` is deprecated but still wins if you explicitly set it, pinning the cadence to that fixed value exactly as before. Set `commitIntervalMin`/`commitIntervalMax` to migrate; those take precedence once set.
-- 🧹 Internal: interval resolution and the per-tick draw live in a `vscode`-free module so the rules are unit tested, including the clamps that stop a `0` or reversed range from spinning the scheduler (37 tests, up from 23). No change to the credential contract — the token still touches git only through per-operation `http.extraheader` and is never written to `.git/config`.
+- 🧹 Internal: interval resolution and the per-tick draw live in a `vscode`-free module so the rules are unit tested, including the clamps that stop a `0` or reversed range from spinning the scheduler, and the ceiling that keeps an absurd value from overflowing `setTimeout` into a 1 ms delay (38 tests, up from 23). No change to the credential contract — the token still touches git only through per-operation `http.extraheader` and is never written to `.git/config`.
 
 ### v3.0.14
 
@@ -102,7 +102,7 @@
 4. The private `code-tracking` repo is created if missing, cloned into global storage, and `origin` is rewritten to a token-free URL.
 
 ### Tracking loop
-At each interval (default 30 min):
+At each interval (a random 20–45 min by default):
 1. **Manual saves** → `Saved <path>` entries.
 2. **No manual save but dirty docs** → `Auto-snapshot <path>` entries, then `saveAll`.
 3. **No dirty docs but workspace git diff** → `Workspace diff snapshot (+X/−Y)`.
