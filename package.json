@@ -2,7 +2,7 @@
   "name": "flaunt-github",
   "displayName": "Flaunt GitHub",
   "description": "Passively tracks coding activity and commits a rolling journal to a private GitHub repo. Dashboard, shareable profile badge, optional AI daily summaries.",
-  "version": "3.0.14",
+  "version": "3.1.0",
   "publisher": "UtkarshSingh",
   "icon": "images/logo.png",
   "license": "MIT",
@@ -60,9 +60,22 @@
           "description": "Fallback GitHub username, paired with codeTracking.githubToken.",
           "default": ""
         },
+        "codeTracking.commitIntervalMin": {
+          "type": "number",
+          "description": "Shortest gap between automatic commits, in minutes. Each commit waits a random time between this and codeTracking.commitIntervalMax, so your contribution graph varies day to day instead of settling on one flat shade of green.",
+          "default": 20,
+          "minimum": 1
+        },
+        "codeTracking.commitIntervalMax": {
+          "type": "number",
+          "description": "Longest gap between automatic commits, in minutes. The wider the gap between min and max, the more your daily commit counts vary.",
+          "default": 45,
+          "minimum": 1
+        },
         "codeTracking.commitInterval": {
           "type": "number",
-          "description": "Minutes between automatic commits.",
+          "description": "Deprecated: fixed minutes between automatic commits. Still honoured if you set it explicitly, which pins the cadence and disables randomization. Prefer codeTracking.commitIntervalMin and codeTracking.commitIntervalMax.",
+          "deprecationMessage": "Use codeTracking.commitIntervalMin and codeTracking.commitIntervalMax instead. Setting this pins the interval to a fixed value.",
           "default": 30,
           "minimum": 1
         },

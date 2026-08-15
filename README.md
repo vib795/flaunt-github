@@ -8,6 +8,13 @@
 
 ## What's new
 
+### v3.1.0
+
+- ✨ **Commits are now spaced randomly instead of on a fixed clock.** A fixed interval meant every coding day produced roughly the same commit count, so a year of contributions rendered as one flat shade of green — recognisably automated. Each tick now waits a random time drawn from `codeTracking.commitIntervalMin`–`codeTracking.commitIntervalMax` (default **20–45 minutes**), so daily totals spread out and the graph varies the way hand-made commits do. The status bar countdown shows the real drawn interval, and the output channel logs it each time.
+  - The range width is the dial: `25`–`35` barely moves the needle, `15`–`90` is visibly textured. Nothing else changes — the journal content, commit messages, and push behaviour are identical.
+  - **Existing setups are untouched.** `codeTracking.commitInterval` is deprecated but still wins if you explicitly set it, pinning the cadence to that fixed value exactly as before. Set `commitIntervalMin`/`commitIntervalMax` to migrate; those take precedence once set.
+- 🧹 Internal: interval resolution and the per-tick draw live in a `vscode`-free module so the rules are unit tested, including the clamps that stop a `0` or reversed range from spinning the scheduler (37 tests, up from 23). No change to the credential contract — the token still touches git only through per-operation `http.extraheader` and is never written to `.git/config`.
+
 ### v3.0.14
 
 - 🐛 **Fixed: status bar stuck on "committing"** — after a manual **Commit Now**, the commit was pushed correctly but the status bar kept showing "Flaunt: committing" until the next scheduled tick (up to one full `commitInterval`). Only the scheduler's continuation ever restored the countdown, and a forced tick has no continuation behind it. Every exit path out of a tick — success, no-op, early return, failure — now settles the bar explicitly.
@@ -127,7 +134,9 @@ Click the status bar item for a quick-pick menu of all of these.
 
 ```jsonc
 {
-  "codeTracking.commitInterval": 30,
+  // Each commit waits a random time between these two, in minutes.
+  "codeTracking.commitIntervalMin": 20,
+  "codeTracking.commitIntervalMax": 45,
   "codeTracking.commitMessagePrefix": "[Flaunt]",
   "codeTracking.timeZone": "",
   "codeTracking.trackFileOpens": false,
