@@ -1,3 +1,5 @@
+import { IntervalRange } from './intervalSchedule';
+
 export type ActivityKind = 'save' | 'auto-snapshot' | 'workspace-diff' | 'open';
 
 export interface ActivityEntry {
@@ -11,7 +13,7 @@ export interface ActivityEntry {
 }
 
 export interface FlauntConfig {
-  commitIntervalMinutes: number;
+  commitIntervalRange: IntervalRange;
   commitMessagePrefix: string;
   timeZone: string;
   trackFileOpens: boolean;

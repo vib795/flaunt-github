@@ -6,6 +6,7 @@ import { TrackingRepo } from './trackingRepo';
 import { PendingQueue } from './pendingQueue';
 import { StatusBar } from './statusBar';
 import { settledStatus } from './statusState';
+import { pickIntervalMs } from './intervalSchedule';
 import { FlauntConfig, ActivityEntry } from './types';
 import { buildCommitMessage, writeJournal } from './journal';
 import { MetricsService } from './metricsService';
@@ -75,9 +76,13 @@ export class IntervalRunner {
 
   private schedule(): void {
     if (this.stopped) {return;}
-    const intervalMs = this.deps.getConfig().commitIntervalMinutes * 60_000;
+    // Drawn per tick, not once per session: a constant cadence is what makes
+    // every coding day land on the same commit count, and the contribution
+    // graph on one flat shade of green.
+    const intervalMs = pickIntervalMs(this.deps.getConfig().commitIntervalRange);
     this.nextAt = Date.now() + intervalMs;
     this.settleStatus();
+    log(`Next commit check in ${(intervalMs / 60_000).toFixed(1)} min.`);
 
     this.timer = setTimeout(async () => {
       await this.tick(false);

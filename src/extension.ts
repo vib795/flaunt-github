@@ -17,6 +17,7 @@ import { MetricsService } from './metricsService';
 import { ActivityTracker } from './activityTracker';
 import { StatusBar } from './statusBar';
 import { IntervalRunner } from './intervalRunner';
+import { sameRange } from './intervalSchedule';
 import { Dashboard } from './dashboard';
 import { registerCommands } from './commands';
 import { migrateLegacySummary } from './journal';
@@ -130,8 +131,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     onConfigChanged((next) => {
-      const intervalChanged =
-        next.commitIntervalMinutes !== cfg.commitIntervalMinutes;
+      const intervalChanged = !sameRange(
+        next.commitIntervalRange,
+        cfg.commitIntervalRange
+      );
       const ignoreChanged =
         JSON.stringify(next.ignoreGlobs) !== JSON.stringify(cfg.ignoreGlobs);
       const trackOpensChanged = next.trackFileOpens !== cfg.trackFileOpens;
