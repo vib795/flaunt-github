@@ -159,7 +159,7 @@
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",
     "eslint": "^10.10.0",
-    "mocha": "^12.0.0",
+    "mocha": "^12.0.1",
     "typescript": "^5.9.3"
   },
   "dependencies": {
