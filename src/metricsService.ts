@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { ExtensionContext, TextDocument, Uri } from 'vscode';
 
 export interface SessionInfo {

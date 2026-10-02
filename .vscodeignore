@@ -19,3 +19,7 @@ tsconfig.test.json
 **/*.ts
 **/*.map
 *.vsix
+.claude/**
+.gstack/**
+.DS_Store
+**/.DS_Store
