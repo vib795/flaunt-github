@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { ActivityEntry, FlauntConfig } from './types';
 import { IgnoreMatcher, redactPath, resolveDocPath } from './ignore';
 import { log, logError } from './logger';

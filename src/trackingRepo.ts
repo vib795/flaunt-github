@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Octokit } from '@octokit/rest';
-import simpleGit, { SimpleGit } from 'simple-git';
+import { simpleGit, type SimpleGit } from 'simple-git';
 import { log, logError } from './logger';
 import { authHeader } from './auth';
 import { PushCredentials } from './types';
