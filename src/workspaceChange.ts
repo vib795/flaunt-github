@@ -6,9 +6,9 @@
  * Why this exists: `git diff` with no revision compares the working tree to the
  * index, so it reports *nothing* for a file that was merely created — untracked
  * paths are invisible to it. An agent writing new files also produces no VS Code
- * save event, so the tick's first two signals (`hadSave`, dirty documents) stay
- * empty too. The result was that a night of unattended agent work could land as
- * zero commits.
+ * save event, and leaves no dirty editor buffer behind, so the tick's other
+ * signals stay empty too. The result was that a night of unattended agent work
+ * could land as zero commits.
  *
  * Detection therefore reads `git status`, which lists untracked paths and honors
  * .gitignore, and takes line counts from `git diff HEAD`, which covers staged as

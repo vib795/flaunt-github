@@ -107,10 +107,14 @@ At each interval (a random 20–45 min by default):
 2. **Edits made outside the editor** → `Changed outside the editor <path>` entries. A
    file-system watcher picks up writes that never pass through VS Code, so work done
    by an AI agent or a CLI tool while you are away still gets committed.
-3. **No manual save but dirty docs** → `Auto-snapshot <path>` entries, then `saveAll`.
-4. **Otherwise, the workspace git status** → `Workspace diff snapshot (+X/−Y)`. This
-   reads `git status` and `git diff HEAD`, so newly created and staged-but-uncommitted
-   files count too, not only tracked modifications.
+3. **Unsaved editor buffers, every tick** → `Auto-snapshot <path>` entries, then
+   `saveAll`. This sweep always runs, so leaving a file open with unsaved changes
+   never costs you the entry, no matter what else happened this interval.
+4. **Line counts, unless steps 1 and 3 already covered the interval** →
+   `Workspace diff snapshot (+X/−Y)`, read from `git status` and `git diff HEAD`, so
+   newly created and staged-but-uncommitted files count too, not only tracked
+   modifications. Watcher entries from step 2 record paths without counts, so they
+   do not suppress this.
 5. Entries are written to per-project monthly markdown files inside the tracking repo.
 6. `git fetch` → merge → commit → push via `-c http.extraheader=...`.
 7. Commit message format:

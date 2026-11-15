@@ -15,7 +15,6 @@ import {
 
 export class ActivityTracker implements vscode.Disposable {
   private buffer: ActivityEntry[] = [];
-  private saveDetected = false;
   private autoSaveInProgress = false;
   private disposables: vscode.Disposable[] = [];
   private openListener?: vscode.Disposable;
@@ -77,14 +76,9 @@ export class ActivityTracker implements vscode.Disposable {
     this.ignore = matcher;
   }
 
-  hadSave(): boolean {
-    return this.saveDetected;
-  }
-
   drain(): ActivityEntry[] {
     const out = this.buffer;
     this.buffer = [];
-    this.saveDetected = false;
     this.savedThisInterval.clear();
     this.externalThisInterval.clear();
     return out;
@@ -96,6 +90,20 @@ export class ActivityTracker implements vscode.Disposable {
 
   isEmpty(): boolean {
     return this.buffer.length === 0;
+  }
+
+  /**
+   * Whether the editor itself produced entries this interval.
+   *
+   * The workspace scan is a coarse folder-level total, so it is redundant once
+   * per-file editor entries describe the same work. Watcher entries are a
+   * different case: they carry paths but no line counts, so they must not
+   * suppress the scan or agent work would be journaled without any `+X/−Y`.
+   */
+  hasEditorEntries(): boolean {
+    return this.buffer.some(
+      (e) => e.kind === 'save' || e.kind === 'auto-snapshot'
+    );
   }
 
   async captureDirtyDocs(): Promise<boolean> {
@@ -190,7 +198,6 @@ export class ActivityTracker implements vscode.Disposable {
     if (doc.uri.scheme !== 'file') {return;}
     if (this.autoSaveInProgress) {return;}
     this.savedThisInterval.add(doc.uri.fsPath);
-    this.saveDetected = true;
     this.recordDoc(doc, 'save');
   }
 

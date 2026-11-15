@@ -141,19 +141,26 @@ export class IntervalRunner {
   private async executeTick(cfg: FlauntConfig): Promise<TickOutcome> {
     const { tracker, repo, pending, status, metrics } = this.deps;
 
-    if (!tracker.hadSave() && tracker.isEmpty()) {
-      const captured = await tracker.captureDirtyDocs();
-      if (!captured) {
-        const ws = await tracker.captureWorkspaceDiff();
-        if (!ws && tracker.isEmpty()) {
-          log('No activity this interval; skipping commit.');
-          return 'no-activity';
-        }
-      }
+    // Always sweep unsaved editor buffers. A dirty document is work in hand and
+    // must not be skipped just because some other signal fired first: the old
+    // chain only looked at dirty docs when nothing else had, so a single manual
+    // save left every other unsaved buffer out of the journal until the user
+    // saved it by hand — and once the file-system watcher landed, any agent
+    // write filled the buffer and suppressed the sweep on every tick.
+    await tracker.captureDirtyDocs();
+
+    // The workspace scan supplies the line counts. Skip it only when per-file
+    // editor entries already cover this interval; watcher entries carry no
+    // counts, so they deliberately do not suppress it.
+    if (!tracker.hasEditorEntries()) {
+      await tracker.captureWorkspaceDiff();
     }
 
     const entries = tracker.drain();
-    if (entries.length === 0) {return 'no-activity';}
+    if (entries.length === 0) {
+      log('No activity this interval; skipping commit.');
+      return 'no-activity';
+    }
 
     status.setState({ kind: 'committing' });
 
