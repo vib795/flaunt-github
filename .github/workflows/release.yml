@@ -20,6 +20,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # A step's own `env:` is not in scope for that step's `if:`, so the
+    # publish guards must read a job-level value. These are booleans, not
+    # the tokens: keeping the secrets at step level means `npm ci` never
+    # has them in its environment.
+    env:
+      HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
+      HAS_OVSX_PAT: ${{ secrets.OVSX_PAT != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -83,12 +90,23 @@ jobs:
           prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
 
       - name: Publish to Open VSX
-        if: env.OVSX_PAT != ''
+        if: env.HAS_OVSX_PAT == 'true'
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: npx ovsx publish "${{ steps.package.outputs.vsix }}" -p "$OVSX_PAT"
 
-      - name: Marketplace reminder
+      - name: Publish to VS Code Marketplace
+        if: env.HAS_VSCE_PAT == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "${{ steps.package.outputs.vsix }}"
+
+      - name: Publish summary
         run: |
-          echo "::notice::VS Code Marketplace is published manually. Run:"
-          echo "::notice::  npx vsce publish --packagePath ${{ steps.package.outputs.vsix }}"
+          if [ "${HAS_VSCE_PAT}" != "true" ]; then
+            echo "::notice::VSCE_PAT not set - Marketplace publish skipped. Run:"
+            echo "::notice::  npx vsce publish --packagePath ${{ steps.package.outputs.vsix }}"
+          fi
+          if [ "${HAS_OVSX_PAT}" != "true" ]; then
+            echo "::notice::OVSX_PAT not set - Open VSX publish skipped."
+          fi
