@@ -35,6 +35,7 @@ function formatEntry(entry: ActivityEntry, timeZone: string): string {
     save: 'Saved',
     'auto-snapshot': 'Auto-snapshot',
     'workspace-diff': 'Workspace diff snapshot',
+    'external-edit': 'Changed outside the editor',
     open: 'Opened'
   };
   const label = kindLabel[entry.kind] ?? entry.kind;
@@ -113,7 +114,13 @@ export function buildCommitMessage(
   const langs = new Map<string, number>();
   let saves = 0;
   for (const e of entries) {
-    if (e.kind === 'save' || e.kind === 'auto-snapshot') {saves++;}
+    if (
+      e.kind === 'save' ||
+      e.kind === 'auto-snapshot' ||
+      e.kind === 'external-edit'
+    ) {
+      saves++;
+    }
     if (e.languageId) {langs.set(e.languageId, (langs.get(e.languageId) ?? 0) + 1);}
   }
   const topLangs = [...langs.entries()]
